@@ -1,0 +1,148 @@
+<svg width="1800" height="2700" viewBox="0 0 1800 2700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="164" y1="110" x2="1636" y2="2592" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16081F"/>
+      <stop offset="0.32" stop-color="#07101E"/>
+      <stop offset="0.67" stop-color="#190B28"/>
+      <stop offset="1" stop-color="#020304"/>
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(900 1350) rotate(90) scale(860 860)">
+      <stop offset="0" stop-color="#FFF6C8"/>
+      <stop offset="0.13" stop-color="#FF8A57"/>
+      <stop offset="0.35" stop-color="#F531B5"/>
+      <stop offset="0.6" stop-color="#5C4DFF"/>
+      <stop offset="1" stop-color="#03050B" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="spectralStroke" x1="410" y1="486" x2="1428" y2="2226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8BF6FF"/>
+      <stop offset="0.22" stop-color="#F8FF7A"/>
+      <stop offset="0.42" stop-color="#FF9B54"/>
+      <stop offset="0.66" stop-color="#FF4CD6"/>
+      <stop offset="1" stop-color="#79A5FF"/>
+    </linearGradient>
+    <linearGradient id="titleGradient" x1="484" y1="350" x2="1348" y2="867" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FCF7E8"/>
+      <stop offset="0.33" stop-color="#F8FF7A"/>
+      <stop offset="0.66" stop-color="#FF78C9"/>
+      <stop offset="1" stop-color="#7DBBFF"/>
+    </linearGradient>
+    <linearGradient id="neonBlue" x1="420" y1="780" x2="1378" y2="2140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#59FFF4"/>
+      <stop offset="1" stop-color="#6A74FF"/>
+    </linearGradient>
+    <linearGradient id="neonPink" x1="460" y1="620" x2="1410" y2="2190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFDE7A"/>
+      <stop offset="0.54" stop-color="#FF5EB4"/>
+      <stop offset="1" stop-color="#A86DFF"/>
+    </linearGradient>
+    <filter id="blur32" x="-200" y="-200" width="2200" height="3100" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="32"/>
+    </filter>
+    <filter id="blur64" x="-300" y="-300" width="2400" height="3300" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="64"/>
+    </filter>
+    <filter id="glow" x="-300" y="-300" width="2400" height="3300" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 24 -10 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+    <pattern id="scanlines" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="4" fill="#FFFFFF" fill-opacity="0.045"/>
+      <rect y="4" width="8" height="4" fill="#000000" fill-opacity="0"/>
+    </pattern>
+    <clipPath id="coverClip">
+      <rect x="0" y="0" width="1800" height="2700" rx="72"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#coverClip)">
+    <rect width="1800" height="2700" fill="url(#bgGradient)"/>
+    <rect width="1800" height="2700" fill="url(#coreGlow)" opacity="0.9"/>
+
+    <g opacity="0.85" filter="url(#blur64)">
+      <ellipse cx="900" cy="1298" rx="520" ry="380" fill="#FF4DA0"/>
+      <ellipse cx="944" cy="1396" rx="520" ry="420" fill="#47C2FF"/>
+      <ellipse cx="806" cy="1210" rx="420" ry="310" fill="#FFF27D"/>
+    </g>
+
+    <g opacity="0.45">
+      <path d="M-120 732C212 592 485 612 720 756C965 906 1188 1186 1518 1108C1730 1056 1910 828 1992 730V953C1770 1152 1548 1275 1306 1272C972 1269 756 1034 486 951C214 869 -12 958 -120 1020V732Z" fill="#11091F"/>
+      <path d="M-84 1973C237 1809 552 1840 786 1974C1017 2106 1255 2379 1602 2290C1783 2244 1916 2131 1998 2058V2337C1783 2522 1508 2620 1256 2601C939 2578 778 2394 522 2286C267 2178 37 2207 -84 2278V1973Z" fill="#0D0F22"/>
+    </g>
+
+    <g opacity="0.78" filter="url(#blur32)">
+      <path d="M322 1054L648 1280L322 1506" stroke="#56F2FF" stroke-width="22" stroke-linecap="round"/>
+      <path d="M1478 1054L1152 1280L1478 1506" stroke="#FF73D0" stroke-width="22" stroke-linecap="round"/>
+      <path d="M364 940L730 1280L364 1620" stroke="#FFF67C" stroke-width="10" stroke-linecap="round"/>
+      <path d="M1436 940L1070 1280L1436 1620" stroke="#6E86FF" stroke-width="10" stroke-linecap="round"/>
+    </g>
+
+    <g opacity="0.9">
+      <path d="M900 468L1047 742L1328 824L1127 1049L1164 1358L900 1217L636 1358L673 1049L472 824L753 742L900 468Z" stroke="url(#spectralStroke)" stroke-width="8"/>
+      <path d="M900 650L1014 866L1243 924L1080 1105L1110 1362L900 1250L690 1362L720 1105L557 924L786 866L900 650Z" stroke="url(#neonPink)" stroke-width="3" opacity="0.75"/>
+      <path d="M900 882L1450 1280L900 1678L350 1280L900 882Z" stroke="url(#neonBlue)" stroke-width="8" opacity="0.82"/>
+      <path d="M900 1001L1279 1280L900 1559L521 1280L900 1001Z" stroke="#FFF6C8" stroke-opacity="0.65" stroke-width="2"/>
+      <path d="M900 1127L1108 1280L900 1433L692 1280L900 1127Z" stroke="#FF8CD6" stroke-width="2"/>
+    </g>
+
+    <g filter="url(#glow)">
+      <rect x="548" y="906" width="704" height="748" rx="48" stroke="url(#spectralStroke)" stroke-width="16"/>
+      <rect x="612" y="970" width="576" height="620" rx="36" stroke="url(#neonBlue)" stroke-width="8"/>
+      <rect x="690" y="1052" width="420" height="456" rx="28" stroke="#FFF6C8" stroke-opacity="0.82" stroke-width="4"/>
+
+      <rect x="748" y="1114" width="304" height="332" rx="18" fill="#04070D" stroke="url(#neonPink)" stroke-width="4"/>
+      <rect x="776" y="1142" width="248" height="276" rx="14" fill="#07111E" stroke="url(#neonBlue)" stroke-width="2"/>
+      <rect x="800" y="1166" width="200" height="228" rx="12" fill="#03050A" stroke="#FFF7B8" stroke-opacity="0.7" stroke-width="2"/>
+
+      <rect x="830" y="1198" width="140" height="164" rx="10" fill="#08131B"/>
+      <rect x="846" y="1214" width="108" height="132" rx="9" stroke="url(#spectralStroke)" stroke-width="2"/>
+
+      <path d="M830 1280C861 1218 942 1218 970 1280C942 1343 861 1343 830 1280Z" fill="url(#titleGradient)"/>
+      <circle cx="900" cy="1280" r="24" fill="#04070D"/>
+      <circle cx="900" cy="1280" r="14" fill="#FFF6C8"/>
+    </g>
+
+    <g opacity="0.72">
+      <path d="M264 1320C455 1098 624 993 900 984C1172 991 1340 1092 1536 1320" stroke="url(#neonBlue)" stroke-width="4"/>
+      <path d="M308 1465C515 1255 664 1179 900 1172C1135 1178 1286 1254 1490 1465" stroke="url(#neonPink)" stroke-width="3"/>
+      <path d="M382 1607C570 1456 694 1411 900 1406C1107 1412 1234 1456 1422 1607" stroke="#FFF47D" stroke-opacity="0.85" stroke-width="2"/>
+    </g>
+
+    <g opacity="0.86">
+      <path d="M196 418L424 644L626 604L462 772L514 1020L286 856L76 954L154 734L0 554L240 578L196 418Z" stroke="#65F6FF" stroke-width="4"/>
+      <path d="M1602 418L1374 644L1172 604L1336 772L1284 1020L1512 856L1722 954L1644 734L1798 554L1558 578L1602 418Z" stroke="#FF7FD5" stroke-width="4"/>
+      <path d="M234 1901L454 2034L632 1979L543 2171L642 2370L421 2309L223 2442L232 2192L49 2011L275 1995L234 1901Z" stroke="#FFF67C" stroke-width="3"/>
+      <path d="M1566 1901L1346 2034L1168 1979L1257 2171L1158 2370L1379 2309L1577 2442L1568 2192L1751 2011L1525 1995L1566 1901Z" stroke="#6C8BFF" stroke-width="3"/>
+    </g>
+
+    <g opacity="0.58" filter="url(#blur32)">
+      <circle cx="318" cy="1258" r="120" fill="#42FFF5"/>
+      <circle cx="1482" cy="1258" r="120" fill="#FF58C2"/>
+      <circle cx="900" cy="774" r="108" fill="#FFF477"/>
+      <circle cx="900" cy="1800" r="142" fill="#8B72FF"/>
+    </g>
+
+    <g opacity="0.64">
+      <path d="M450 1710C604 1649 733 1622 900 1622C1067 1622 1197 1649 1350 1710" stroke="#FFF6C8" stroke-opacity="0.42" stroke-width="2"/>
+      <path d="M404 1768C576 1698 720 1668 900 1668C1081 1668 1225 1698 1396 1768" stroke="url(#spectralStroke)" stroke-width="3"/>
+      <path d="M372 1845C548 1773 706 1742 900 1742C1094 1742 1253 1773 1428 1845" stroke="url(#neonBlue)" stroke-width="5"/>
+      <path d="M316 1940C522 1846 700 1807 900 1807C1100 1807 1278 1846 1484 1940" stroke="url(#neonPink)" stroke-width="8"/>
+    </g>
+
+    <g opacity="0.92">
+      <text x="900" y="348" text-anchor="middle" fill="url(#titleGradient)" font-size="222" font-weight="900" letter-spacing="16" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">EYE</text>
+      <text x="900" y="588" text-anchor="middle" fill="url(#titleGradient)" font-size="222" font-weight="900" letter-spacing="18" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">CANDY</text>
+      <text x="900" y="710" text-anchor="middle" fill="#F6F0DB" font-size="42" font-weight="700" letter-spacing="10" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">HD PSYCHEDELIC VIDEO FEEDBACK GENERATOR</text>
+    </g>
+
+    <g opacity="0.88">
+      <rect x="302" y="2220" width="1196" height="236" rx="36" fill="#080B12" fill-opacity="0.7" stroke="url(#spectralStroke)" stroke-width="3"/>
+      <text x="900" y="2303" text-anchor="middle" fill="#F6F0DB" font-size="54" font-weight="800" letter-spacing="5" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">100 PRESETS / TRUE FEEDBACK / PRISM / FRACTAL / TUNNEL</text>
+      <text x="900" y="2372" text-anchor="middle" fill="#8DDCFF" font-size="42" font-weight="700" letter-spacing="4" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">PROCEDURAL AUDIO  /  MP4 CAPTURE  /  MIRROR WORLDS  /  KALEIDOSCOPES</text>
+      <text x="900" y="2430" text-anchor="middle" fill="#FF86CD" font-size="28" font-weight="600" letter-spacing="8" font-family="'Avenir Next', 'Helvetica Neue', Arial, sans-serif">A CUTTING-EDGE SIGNAL HALLUCINATION ENGINE FOR MACOS</text>
+    </g>
+
+    <rect width="1800" height="2700" fill="url(#scanlines)" opacity="0.22"/>
+    <rect x="18" y="18" width="1764" height="2664" rx="58" stroke="#F7F1E0" stroke-opacity="0.16" stroke-width="2"/>
+  </g>
+</svg>
