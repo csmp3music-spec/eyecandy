@@ -68,7 +68,11 @@ enum PresetLibrary {
 
     private static func hallOfMirrors(progress: Float, variant: Int) -> EffectSettings {
         var settings = EffectSettings.baseline
-        settings.colorSpace = (variant % 2 == 0 ? ColorSpaceMode.prismIce : ColorSpaceMode.lumaGhost).shaderIndex
+        if variant.isMultiple(of: 3) {
+            settings.colorSpace = ColorSpaceMode.hologramPhosphor.shaderIndex
+        } else {
+            settings.colorSpace = (variant % 2 == 0 ? ColorSpaceMode.prismIce : ColorSpaceMode.lumaGhost).shaderIndex
+        }
         settings.feedback = 0.78 + progress * 0.18
         settings.zoom = 1.01 + progress * 0.05
         settings.rotation = signed(progress, amplitude: 0.11, variant: variant)
@@ -83,12 +87,19 @@ enum PresetLibrary {
         settings.edgeGlow = 0.24 + progress * 0.36
         settings.rings = 0.22 + progress * 0.18
         settings.vignette = 0.16 + progress * 0.2
+        settings.hologramMix = 0.16 + progress * 0.42
+        settings.hologramParallax = 0.18 + progress * 0.34
+        settings.hologramDiffraction = 0.22 + progress * 0.38
+        settings.hologramInterference = 0.12 + progress * 0.42
+        settings.hologramPhase = 0.10 + progress * 0.24
         return settings
     }
 
     private static func prismSimulator(progress: Float, variant: Int) -> EffectSettings {
         var settings = EffectSettings.baseline
-        settings.colorSpace = ColorSpaceMode.prismIce.shaderIndex
+        settings.colorSpace = progress > 0.55 && !variant.isMultiple(of: 2)
+            ? ColorSpaceMode.hologramPhosphor.shaderIndex
+            : ColorSpaceMode.prismIce.shaderIndex
         settings.feedback = 0.68 + progress * 0.18
         settings.sourceMix = 0.66 + progress * 0.2
         settings.prism = 0.38 + progress * 0.52
@@ -102,12 +113,19 @@ enum PresetLibrary {
         settings.bloom = 0.18 + progress * 0.32
         settings.rings = 0.14 + progress * 0.22
         settings.plasma = 0.24 + progress * 0.22
+        settings.hologramMix = 0.08 + progress * 0.38
+        settings.hologramParallax = 0.12 + progress * 0.24
+        settings.hologramDiffraction = 0.28 + progress * 0.4
+        settings.hologramInterference = 0.14 + progress * 0.32
+        settings.hologramPhase = 0.08 + progress * 0.28
         return settings
     }
 
     private static func chromaLuma(progress: Float, variant: Int) -> EffectSettings {
         var settings = EffectSettings.baseline
-        settings.colorSpace = ColorSpaceMode.lumaGhost.shaderIndex
+        settings.colorSpace = progress > 0.78 || variant.isMultiple(of: 4)
+            ? ColorSpaceMode.hologramPhosphor.shaderIndex
+            : ColorSpaceMode.lumaGhost.shaderIndex
         settings.feedback = 0.72 + progress * 0.18
         settings.sourceMix = 0.56 + progress * 0.42
         settings.chromaSplit = 0.01 + progress * 0.02
@@ -122,6 +140,11 @@ enum PresetLibrary {
         settings.noise = 0.12 + progress * 0.18
         settings.raster = 0.08 + progress * 0.18
         settings.edgeGlow = 0.12 + progress * 0.2
+        settings.hologramMix = 0.10 + progress * 0.28
+        settings.hologramParallax = 0.06 + progress * 0.18
+        settings.hologramDiffraction = 0.12 + progress * 0.34
+        settings.hologramInterference = 0.18 + progress * 0.42
+        settings.hologramPhase = 0.14 + progress * 0.24
         return settings
     }
 
@@ -215,7 +238,11 @@ enum PresetLibrary {
 
     private static func parallelUniverse(progress: Float, variant: Int) -> EffectSettings {
         var settings = EffectSettings.baseline
-        settings.colorSpace = (variant % 2 == 0 ? ColorSpaceMode.prismIce : ColorSpaceMode.minterSynesthesia).shaderIndex
+        if variant.isMultiple(of: 3) {
+            settings.colorSpace = ColorSpaceMode.hologramPhosphor.shaderIndex
+        } else {
+            settings.colorSpace = (variant % 2 == 0 ? ColorSpaceMode.prismIce : ColorSpaceMode.minterSynesthesia).shaderIndex
+        }
         settings.feedback = 0.8 + progress * 0.16
         settings.sourceMix = 0.46 + progress * 0.36
         settings.zoom = 1.01 + progress * 0.03
@@ -231,6 +258,11 @@ enum PresetLibrary {
         settings.fractal = 0.16 + progress * 0.3
         settings.moire = 0.08 + progress * 0.2
         settings.bloom = 0.2 + progress * 0.22
+        settings.hologramMix = 0.24 + progress * 0.46
+        settings.hologramParallax = 0.22 + progress * 0.36
+        settings.hologramDiffraction = 0.16 + progress * 0.42
+        settings.hologramInterference = 0.24 + progress * 0.46
+        settings.hologramPhase = 0.18 + progress * 0.34
         return settings
     }
 

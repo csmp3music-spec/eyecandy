@@ -9,6 +9,7 @@ private struct ShaderUniforms {
     var motion: SIMD4<Float>
     var symmetry: SIMD4<Float>
     var optics: SIMD4<Float>
+    var hologram: SIMD4<Float>
     var colorA: SIMD4<Float>
     var colorB: SIMD4<Float>
     var signalA: SIMD4<Float>
@@ -25,6 +26,7 @@ private struct ShaderUniforms {
         motion = SIMD4(settings.driftX, settings.driftY, settings.spiral, settings.wobble)
         symmetry = SIMD4(settings.kaleidoscope, settings.mirrorMix, settings.facetMix, settings.prism)
         optics = SIMD4(settings.prismCount, settings.refraction, settings.reflection, settings.universe)
+        hologram = SIMD4(settings.hologramMix, settings.hologramParallax, settings.hologramDiffraction, settings.hologramInterference)
         colorA = SIMD4(settings.hueShift, settings.saturation, settings.contrast, settings.brightness)
         colorB = SIMD4(settings.gamma, settings.chromaSplit, settings.lumaMix, settings.invert)
         signalA = SIMD4(settings.plasma, settings.tunnel, settings.twister, settings.raster)
@@ -32,7 +34,7 @@ private struct ShaderUniforms {
         finishA = SIMD4(settings.xorField, settings.scanlines, settings.grain, settings.bloom)
         finishB = SIMD4(settings.edgeGlow, settings.vignette, settings.feedbackWarp, settings.temporalJitter)
         finishC = SIMD4(settings.beat, settings.strobe, settings.pixelate, settings.detail)
-        modes = SIMD4(settings.colorSpace, audioSettings.reactive ? 1.0 : 0.0, audioSettings.reactivity, 0.0)
+        modes = SIMD4(settings.colorSpace, audioSettings.reactive ? 1.0 : 0.0, audioSettings.reactivity, settings.hologramPhase)
         audio = SIMD4(audioMetrics.level, audioMetrics.bass, audioMetrics.shimmer, audioMetrics.beatPhase)
     }
 }

@@ -11,6 +11,7 @@ enum ShaderSource {
         float4 motion;
         float4 symmetry;
         float4 optics;
+        float4 hologram;
         float4 colorA;
         float4 colorB;
         float4 signalA;
@@ -121,7 +122,13 @@ enum ShaderSource {
         float mono = saturate(t);
         float3 lumaGhost = mix(float3(0.04, 0.06, 0.08), float3(0.92, 0.96, 1.0), mono);
         lumaGhost += reactivePulse * float3(0.08, 0.18, 0.24);
-        return saturate(lumaGhost);
+        if (mode < 4.5) {
+            return saturate(lumaGhost);
+        }
+
+        float3 hologramPhosphor = float3(0.08, 0.78, 0.92) + float3(0.14, 0.24, 0.22) * cos(6.2831853 * (t * 1.12 + float3(0.0, 0.21, 0.43)));
+        hologramPhosphor += reactivePulse * float3(0.04, 0.22, 0.12);
+        return saturate(pow(hologramPhosphor, float3(0.86)));
     }
 
     float3 hueRotate(float3 color, float angle) {
@@ -146,6 +153,20 @@ enum ShaderSource {
         angle = fmod(angle, halfSector * 2.0);
         angle = abs(angle - halfSector);
         return float2(cos(angle), sin(angle)) * radius;
+    }
+
+    float hologramField(float2 p, float time, constant Uniforms& u) {
+        if (u.hologram.x < 0.001) {
+            return 0.0;
+        }
+
+        float radius = length(p) + 0.001;
+        float angle = atan2(p.y, p.x);
+        float phase = u.modes.w;
+        float carrier = sin((p.x - p.y * 0.45) * (22.0 + u.hologram.w * 84.0) + time * (4.0 + phase * 9.0));
+        float cone = sin(radius * (18.0 + u.hologram.z * 68.0) - time * (5.0 + phase * 7.0));
+        float fringe = sin(angle * (10.0 + u.hologram.y * 20.0) + time * (2.2 + u.hologram.z * 4.0));
+        return (carrier * 0.45 + cone * 0.35 + fringe * 0.2) * u.hologram.x;
     }
 
     float3 sourceField(float2 p, float time, constant Uniforms& u) {
@@ -174,6 +195,7 @@ enum ShaderSource {
         float2 cell = floor((p + 1.8) * (18.0 + detail * 18.0));
         float xorish = sin((cell.x + fmod(cell.x + cell.y, 2.0) * cell.y) * 0.32 + time * 4.5);
         float noiseField = fbm(p * 4.5 + time * 0.2);
+        float hologram = hologramField(p, time, u);
 
         float signal = 0.0;
         signal += plasma * u.signalA.x;
@@ -185,15 +207,17 @@ enum ShaderSource {
         signal += fractal * u.signalB.z;
         signal += noiseField * u.signalB.w;
         signal += xorish * u.finishA.x;
+        signal += hologram * 0.55;
         signal /= max(
             1.0,
             u.signalA.x + u.signalA.y + u.signalA.z + u.signalA.w +
-            u.signalB.x + u.signalB.y + u.signalB.z + u.signalB.w + u.finishA.x
+            u.signalB.x + u.signalB.y + u.signalB.z + u.signalB.w + u.finishA.x + u.hologram.x * 0.55
         );
 
         float pulse = sin(time * (2.4 + u.finishC.x * 12.0 + pulseDrive * 10.0) + radius * (6.0 + reactive * 5.0) + u.audio.w * 6.2831853) * 0.5 + 0.5;
         float shimmer = fbm(p * (6.0 + detail * 10.0 + shimmerDrive * 8.0) + time * (0.15 + reactive * 0.2));
         float t = signal * 0.5 + 0.5 + pulse * (0.14 + reactive * 0.18) + shimmer * (0.22 + reactive * 0.12) + reactive * u.audio.x * 0.24;
+        t += hologram * (0.12 + u.hologram.w * 0.14);
         return paletteMode(t, u.modes.x, reactive * (u.audio.y + u.audio.z * 0.6));
     }
 
@@ -212,11 +236,15 @@ enum ShaderSource {
         warped += fieldValue * u.finishB.z * 0.08;
         warped += float2(cos(angle * max(u.optics.x, 1.0) + u.resolutionTime.z), sin(angle * max(u.optics.x, 1.0) - u.resolutionTime.z)) * u.symmetry.w * 0.05;
         warped += float2(cos(u.audio.w * 6.2831853 + angle), sin(u.audio.w * 6.2831853 - angle)) * reactive * u.audio.y * 0.05;
+        warped += float2(
+            sin(u.resolutionTime.z * (1.6 + u.modes.w * 4.0) + p.y * (9.0 + u.hologram.w * 18.0)),
+            cos(u.resolutionTime.z * (1.2 + u.modes.w * 3.2) - p.x * (8.0 + u.hologram.z * 20.0))
+        ) * u.hologram.y * (0.012 + reactive * 0.008);
         warped = mix(warped, float2(abs(warped.x), abs(warped.y)), saturate(u.symmetry.y));
 
         float2 uv = warped / aspect + 0.5;
         uv = clamp(uv, 0.001, 0.999);
-        float split = u.colorB.y;
+        float split = u.colorB.y + u.hologram.z * 0.0035 * (0.5 + fieldValue);
         float2 offset = float2(split, split * 0.58);
 
         float r = prevTexture.sample(linearSampler, clamp(uv + offset, 0.001, 0.999)).r;
@@ -234,6 +262,62 @@ enum ShaderSource {
         }
 
         return feedback + echoes * u.optics.w;
+    }
+
+    float3 applyHologram(
+        texture2d<float> prevTexture,
+        sampler linearSampler,
+        float2 uv,
+        float2 p,
+        float2 res,
+        float fieldValue,
+        float3 combined,
+        constant Uniforms& u
+    ) {
+        float mixAmount = saturate(u.hologram.x);
+        if (mixAmount < 0.001) {
+            return combined;
+        }
+
+        float reactive = u.modes.y * u.modes.z;
+        float time = u.resolutionTime.z;
+        float phase = u.modes.w;
+        float parallax = u.hologram.y;
+        float diffraction = u.hologram.z;
+        float interference = u.hologram.w;
+
+        float carrier = sin(uv.y * res.y * (1.3 + diffraction * 3.8) + time * (11.0 + phase * 18.0) + fieldValue * 16.0) * 0.5 + 0.5;
+        float crossCarrier = sin(uv.x * res.x * (0.28 + diffraction * 1.1) - time * (5.0 + phase * 9.0) + fieldValue * 8.0) * 0.5 + 0.5;
+        float fringe = sin((p.x + p.y * 0.65) * (18.0 + interference * 110.0) + time * (3.0 + phase * 11.0) + u.audio.w * 6.2831853) * 0.5 + 0.5;
+        float shimmer = fbm(p * (8.0 + interference * 18.0 + diffraction * 8.0) + float2(time * 0.18, -time * 0.11));
+
+        float2 direction = normalize(float2(p.x + 0.0001, p.y - 0.0001));
+        float2 depthOffset = direction * (0.003 + parallax * 0.018) * (0.3 + fringe);
+        depthOffset += float2(
+            sin(time * (0.9 + phase * 3.2) + p.y * (8.0 + interference * 14.0)),
+            cos(time * (1.1 + phase * 2.6) - p.x * (7.0 + diffraction * 18.0))
+        ) * (0.002 + parallax * 0.014);
+
+        float3 ghostA = prevTexture.sample(linearSampler, clamp(uv + depthOffset * float2(1.0, 0.75), 0.001, 0.999)).rgb;
+        float3 ghostB = prevTexture.sample(linearSampler, clamp(uv - depthOffset * float2(0.65, 1.0), 0.001, 0.999)).rgb;
+        float3 spectralGhost = float3(ghostA.r, ghostB.g, ghostA.b);
+
+        float3 phosphor = paletteMode(
+            fieldValue * 0.75 + fringe * 0.26 + shimmer * 0.24 + carrier * 0.18,
+            5.0,
+            reactive * (u.audio.y + u.audio.z * 0.6)
+        );
+        phosphor = mix(phosphor, float3(0.18, 0.95, 0.88), 0.18 + diffraction * 0.32);
+
+        float fresnel = pow(saturate(1.08 - length(p) * 1.12), 1.8);
+        float bandMask = mix(carrier, crossCarrier, 0.35) * (0.4 + diffraction * 0.5);
+        float3 lightField = phosphor * (0.14 + bandMask * 0.58 + fringe * (0.12 + interference * 0.22) + fresnel * 0.18);
+        float3 hologram = spectralGhost * (0.32 + parallax * 0.4) + lightField;
+        hologram += float3(crossCarrier, carrier, fringe) * (0.03 + diffraction * 0.08);
+        hologram += shimmer * float3(0.02, 0.05, 0.06);
+
+        float envelope = 0.72 + bandMask * 0.26 + fringe * 0.12;
+        return mix(combined, combined * envelope + hologram, mixAmount);
     }
 
     fragment float4 feedbackFragment(
@@ -285,6 +369,7 @@ enum ShaderSource {
         combined *= mix(1.0, 0.55 + strobeGate * 0.65, saturate(u.finishC.y));
         combined += reactive * u.audio.z * 0.12;
         combined *= 1.0 + reactive * u.audio.y * 0.26;
+        combined = applyHologram(prevTexture, linearSampler, uv, p, res, fieldValue, combined, u);
 
         float luma = dot(combined, float3(0.2126, 0.7152, 0.0722));
         combined = mix(combined, float3(luma), saturate(u.colorB.z * 0.68));
@@ -305,6 +390,12 @@ enum ShaderSource {
         if (u.modes.x > 0.5 && u.modes.x < 1.5) {
             combined = pow(saturate(combined), float3(0.82));
             combined += reactive * u.audio.x * float3(0.08, 0.02, 0.12);
+        }
+
+        if (u.modes.x > 4.5) {
+            float phosphorScan = sin(uv.y * res.y * 0.82 + time * 0.9) * 0.5 + 0.5;
+            combined = mix(combined, float3(max(combined.g, combined.b)), 0.06 + u.hologram.z * 0.14);
+            combined += phosphorScan * float3(0.0, 0.04, 0.06) * (0.18 + u.hologram.x * 0.24);
         }
 
         if (u.colorB.w > 0.001) {

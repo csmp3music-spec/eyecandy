@@ -79,6 +79,7 @@ enum ColorSpaceMode: Int, CaseIterable, Identifiable {
     case prismIce
     case lavaChrome
     case lumaGhost
+    case hologramPhosphor
 
     var id: Int { rawValue }
 
@@ -94,6 +95,8 @@ enum ColorSpaceMode: Int, CaseIterable, Identifiable {
             return "Lava Chrome"
         case .lumaGhost:
             return "Luma Ghost"
+        case .hologramPhosphor:
+            return "Hologram Phosphor"
         }
     }
 
@@ -124,6 +127,11 @@ struct EffectSettings: Equatable, Hashable, Sendable {
     var refraction: Float = 0.20
     var reflection: Float = 0.18
     var universe: Float = 0.12
+    var hologramMix: Float = 0.0
+    var hologramParallax: Float = 0.0
+    var hologramDiffraction: Float = 0.0
+    var hologramInterference: Float = 0.0
+    var hologramPhase: Float = 0.0
     var pixelate: Float = 0.0
     var detail: Float = 0.58
 
@@ -249,6 +257,17 @@ enum ControlSchema {
                 SliderDescriptor(id: "universe", title: "Universe Echo", keyPath: \.universe, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
                 SliderDescriptor(id: "pixelate", title: "Pixelate", keyPath: \.pixelate, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
                 SliderDescriptor(id: "detail", title: "Detail", keyPath: \.detail, range: 0.1 ... 1.2, step: 0.01, format: "%.2f"),
+            ]
+        ),
+        ControlSection(
+            id: "hologram",
+            title: "Hologram",
+            descriptors: [
+                SliderDescriptor(id: "hologramMix", title: "Hologram Mix", keyPath: \.hologramMix, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
+                SliderDescriptor(id: "hologramParallax", title: "Parallax", keyPath: \.hologramParallax, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
+                SliderDescriptor(id: "hologramDiffraction", title: "Diffraction", keyPath: \.hologramDiffraction, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
+                SliderDescriptor(id: "hologramInterference", title: "Interference", keyPath: \.hologramInterference, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
+                SliderDescriptor(id: "hologramPhase", title: "Phase Drift", keyPath: \.hologramPhase, range: 0.0 ... 1.0, step: 0.01, format: "%.2f"),
             ]
         ),
     ]

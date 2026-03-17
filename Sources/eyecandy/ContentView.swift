@@ -277,14 +277,21 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 14) {
                 SectionCard(title: "Color Space") {
                     VStack(alignment: .leading, spacing: 12) {
-                        Picker("Color Space", selection: colorSpaceBinding) {
-                            ForEach(ColorSpaceMode.allCases) { mode in
-                                Text(mode.label).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Color Space")
+                                .font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.62))
 
-                        Text("Minter Synesthesia pushes high-contrast rainbow cycling and harsher arcade luminance.")
+                            Picker("Color Space", selection: colorSpaceBinding) {
+                                ForEach(ColorSpaceMode.allCases) { mode in
+                                    Text(mode.label).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                        }
+
+                        Text("Minter Synesthesia pushes harsher arcade luminance. Hologram Phosphor adds spectral ghosting, diffraction bands, and projector-like depth shimmer.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.7))
                     }
