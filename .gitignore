@@ -1,0 +1,10 @@
+.DS_Store
+*.swp
+
+.build/
+dist/
+recordings/
+*.app/
+
+godot_polybius/
+screwdriver/
