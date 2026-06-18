@@ -7,6 +7,10 @@ Current rebuilt features:
 - 284 procedural psychedelic video presets: 220 generated family presets plus 64 named Jeff Minter-inspired signature presets.
 - 150+ video performance presets, including 128 new named psychedelic show presets that vary visual engines, Minter modes, demoscene layers, chroma/luma video modes, frame rates, and recording resolutions.
 - Dropdown inspector navigation for presets, sequencer, synth, drums, keyboard, light synth, feedback/camera, performance, broadcast, and output.
+- New default `Studio` dashboard that brings transport, quantized scene launch, live scene deck recall, bus mixer, and visual output safety into one performance view.
+- Inspector workflow improvements: quick panel jump buttons, compact live status strip, searchable visual presets, and an always-visible AppKit-backed vertical scrollbar for long control panels.
+- Audio-reactive analyzer visualizer modes: Spectrum Tunnel, Oscilloscope Garden, Chroma Vectorscope, Spectral Particles, and Hyper Analyzer.
+- Live analyzer metrics for bass, mid, high, transient/flux, spectral centroid, and stereo balance drive the visualizer layers instead of relying only on beat timing.
 - SwiftUI TimelineView/Canvas renderer with beat-reactive symmetry, tunnels, rings, demoscene scan lines, and modulation.
 - Jeff Minter-inspired neon grid, orbiting light-synth, and arcade vortex overlays.
 - Modernized Minter core modes inspired by Psychedelia, Colourspace, VLM/Neon, Tempest/TxK-style vector webs, Space Giraffe, Polybius tunnels, Gridrunner lattices, Neon Loopz, and LlamaTron trails.
@@ -20,6 +24,7 @@ Current rebuilt features:
 - Minter/laser colourspaces: Colourspace, Yak Neon, Phosphor, and Laserium palettes.
 - Full performance controls: eight-slot scene deck, palette modes, blend/key styles, blackout, freeze frame, strobe gate, strobe safety, and MP4 parity.
 - A/B scene morphing: pick two saved scene slots, crossfade continuous parameters, and generate an eight-scene performance deck for live sets.
+- Quantized scene launch: trigger scene recalls immediately, on the next beat, next bar, or every four bars, with queued-launch HUD feedback.
 - Beat-synced multitap delay FX with per-tap beat offset, level, feedback, and visual spread.
 - Golden Phi tempo mode: sets 161.8 BPM, phi-derived swing, a 13-step loop, and golden-ratio delay taps for audio/visual echoes.
 - Expanded sequencer and synths: groove templates, scale-aware acid/lead generators, mutation/humanize tools, lane probability, velocity, ratchets, per-lane lengths, audible clap sequencing, granular/wavetable/FM/ring/phase/reese/bitcrush instruments, and granular oscillator controls.
@@ -30,7 +35,9 @@ Current rebuilt features:
 - Every preset change hard-cuts the screen and procedurally regenerates a new visual scene/profile instead of only recoloring the previous design.
 - Named Jeff Minter-inspired signature presets with tuned Minter modes, palettes, engines, light-synth modes, demoscene layers, and holographic layers.
 - Stereoscopic output modes: red/cyan anaglyph, side-by-side, top/bottom, line interlace, and depth ghost with stereo depth control.
-- AVAudioEngine procedural synth output.
+- AVAudioEngine procedural synth output with stereo master drive, width control, safety limiter, and live peak/gain-reduction meters.
+- Production-style bus mixer for bass, lead, drums, live keys, and FX return with per-bus level, pan, send, mute, and solo controls.
+- Visual output mastering controls for lower default brightness, plus live `Visual Gain` and `Visual Soft Clip` controls to keep neon palettes vivid without blowing out the frame.
 - Expanded synth instruments: Acid Saw, Sub Square, Super Saw, FM Bell, Glass Pad, Noise Organ, Sync Lead, and Formant Vox.
 - 16-step bass, lead, kick, snare, hat, and clap pattern editing.
 - Analog bass and lead voice controls.
@@ -43,8 +50,9 @@ Current rebuilt features:
 - Video performance presets pair visual engines, Minter modes, demoscene modes, palettes, post-processing, frame rate, and output resolution.
 - YouTube/Facebook/custom RTMP broadcast panel using `ffmpeg` to loop the latest MP4 recording to an RTMP/RTMPS ingest URL.
 - True live RTMP output that streams generated frames directly to `ffmpeg` over raw-video stdin instead of looping a recorded MP4.
+- Facebook Live safe setup: RTMPS port 443, 720p30, H.264 Main profile, 2-second keyframes, AAC-LC stereo, yuv420p/BT.709, stream URL normalization, and expanded ffmpeg connection diagnostics.
 - Broadcast stereo desktop-mix audio through a named AVFoundation audio device such as `BlackHole 2ch`, with silent fallback, Facebook-safe AAC settings, and ffmpeg error reporting in app status.
-- Camera input overlay for optical video feedback: point a camera at the screen and blend the live camera feed back into the visuals.
+- Camera input overlay for optical video feedback with selectable AVFoundation camera source, refresh, mirror, luma/chroma, and depth controls.
 
 Run locally:
 
@@ -72,6 +80,20 @@ recreates the dated package directory from scratch, copies the current
 `README.md` and `USER_MANUAL.md` into `docs/`, ad-hoc signs the app bundle, and
 removes stale numbered duplicate package folders such as
 `eyecandy-arm64-package 2`.
+
+Windows build setup must run on Windows because Swift depends on Visual Studio
+C++ tools and the Windows SDK there. On a Windows machine, install the build
+dependencies with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/windows-bootstrap.ps1
+```
+
+After restarting the terminal, create a Windows release zip with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1
+```
 
 Broadcasting:
 

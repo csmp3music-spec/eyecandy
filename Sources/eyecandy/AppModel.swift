@@ -3,14 +3,16 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var selectedPanel: InspectorPanel = .presets
+    @Published var selectedPanel: InspectorPanel = .studio
     @Published var selectedFamily: PresetFamily = .all
     @Published var selectedPreset: VisualPreset = PresetLibrary.visualPresets[0]
+    @Published var visualPresetFilter = ""
     @Published var tempoMode: TempoMode = .manual
     @Published var sequencer = SequencerState()
     @Published var bassVoice = SynthVoice()
     @Published var leadVoice = SynthVoice(instrument: .syncLead, level: 0.32, octave: 4, cutoff: 0.68, resonance: 0.18, glide: 0.08, accent: 0.45)
     @Published var delaySettings = MultiTapDelaySettings()
+    @Published var mixer = AudioMixerState()
     @Published var modSlots = [ModSlot(enabled: true, source: .beat, destination: .zoom, amount: 0.24, rate: 1.0), ModSlot(), ModSlot()]
     @Published var liveNotes: Set<Int> = []
     @Published var autopilotEnabled = false
@@ -23,6 +25,10 @@ final class AppModel: ObservableObject {
     @Published var demosceneIntensity = 0.62
     @Published var lightSynthMode: LightSynthMode = .everything
     @Published var lightSynthIntensity = 0.68
+    @Published var audioVisualizerMode: AudioVisualizerMode = .hyperAnalyzer
+    @Published var audioVisualizerIntensity = 0.72
+    @Published var audioVisualizerDetail = 0.66
+    @Published var audioVisualizerPersistence = 0.48
     @Published var macroX = 0.58
     @Published var macroY = 0.64
     @Published var photonDirectorEnabled = true
@@ -54,12 +60,21 @@ final class AppModel: ObservableObject {
     @Published var strobeEnabled = false
     @Published var strobeRate = 8.0
     @Published var sceneDeck: [LightSceneSnapshot?] = Array(repeating: nil, count: 8)
+    @Published var sceneLaunchQuantization: SceneLaunchQuantization = .nextBar
+    @Published var queuedSceneSlot: Int?
     @Published var sceneMorphFromSlot = 0
     @Published var sceneMorphToSlot = 1
     @Published var sceneMorphAmount = 0.0
     @Published var masterLevel = 0.55
-    @Published var bloom = 0.62
-    @Published var exposure = 0.72
+    @Published var masterDrive = 0.18
+    @Published var stereoWidth = 0.62
+    @Published var limiterCeiling = 0.92
+    @Published var limiterRelease = 0.38
+    @Published var audioMeter = AudioMeterSnapshot()
+    @Published var bloom = 0.36
+    @Published var exposure = 0.58
+    @Published var visualOutputGain = 0.80
+    @Published var visualSoftClip = 0.74
     @Published var recordingDuration = 12.0
     @Published var recordingFPS = 30
     @Published var recordingResolution: RecordingResolution = .hd720
@@ -80,11 +95,20 @@ final class AppModel: ObservableObject {
     private let goldenTempoBPM = 161.8
     private var autopilotIndex = 0
     private var lastAutopilotBeat = -1
+    private var lastQueuedSceneBeat = -1
     private var tapTempoTimes: [TimeInterval] = []
+    private var audioMeterTimer: Timer?
 
     var filteredPresets: [VisualPreset] {
-        guard selectedFamily != .all else { return PresetLibrary.visualPresets }
-        return PresetLibrary.visualPresets.filter { $0.family == selectedFamily }
+        let familyFiltered = selectedFamily == .all
+            ? PresetLibrary.visualPresets
+            : PresetLibrary.visualPresets.filter { $0.family == selectedFamily }
+        let query = visualPresetFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return familyFiltered }
+        return familyFiltered.filter { preset in
+            preset.name.localizedCaseInsensitiveContains(query)
+                || preset.family.rawValue.localizedCaseInsensitiveContains(query)
+        }
     }
 
     var beatPhase: Double {
@@ -110,6 +134,7 @@ final class AppModel: ObservableObject {
         do {
             pushAudioState()
             try audioEngine.start()
+            startAudioMetering()
             status = "Audio engine running"
         } catch {
             status = "Audio failed: \(error.localizedDescription)"
@@ -118,7 +143,13 @@ final class AppModel: ObservableObject {
 
     func stopAudio() {
         audioEngine.stop()
+        audioMeterTimer?.invalidate()
+        audioMeterTimer = nil
         status = "Audio stopped"
+    }
+
+    func refreshAudioMeter() {
+        audioMeter = audioEngine.meterSnapshot()
     }
 
     func toggleNote(_ midiNote: Int) {
@@ -169,8 +200,10 @@ final class AppModel: ObservableObject {
         macroX = Double((preset.name.count * 37) % 100) / 100.0
         macroY = Double((preset.name.count * 71 + preset.frameRate) % 100) / 100.0
         prismSplits = 2 + ((preset.name.count + preset.frameRate) % 10)
-        bloom = min(1.0, 0.42 + preset.intensity * 0.48)
-        exposure = min(1.35, 0.58 + preset.intensity * 0.62)
+        bloom = min(0.72, 0.22 + preset.intensity * 0.26)
+        exposure = min(0.95, 0.48 + preset.intensity * 0.30)
+        visualOutputGain = min(0.92, 0.66 + preset.intensity * 0.18)
+        visualSoftClip = max(0.62, 0.82 - preset.intensity * 0.12)
         holographicMode = preset.videoMode == .clean ? .off : HolographicMode.allCases[(preset.name.count + preset.frameRate) % HolographicMode.allCases.count]
         cameraFeedbackMode = feedbackMode(for: preset.videoMode)
         cameraOverlayOpacity = min(0.72, 0.18 + preset.intensity * 0.42)
@@ -497,6 +530,8 @@ final class AppModel: ObservableObject {
     }
 
     func tickPerformanceClock() {
+        launchQueuedSceneIfNeeded()
+
         guard autopilotEnabled else { return }
         let presets = filteredPresets
         guard !presets.isEmpty else { return }
@@ -577,6 +612,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func refreshCameraDevices() {
+        cameraInput.refreshDevices()
+        status = cameraInput.status
+    }
+
+    func selectCameraDevice(_ id: String) {
+        cameraInput.selectDevice(id: id)
+        status = cameraInput.status
+    }
+
     func saveScene(slot: Int) {
         guard sceneDeck.indices.contains(slot) else { return }
         sceneDeck[slot] = makeSceneSnapshot(name: "Scene \(slot + 1)")
@@ -585,6 +630,21 @@ final class AppModel: ObservableObject {
 
     func recallScene(slot: Int) {
         guard sceneDeck.indices.contains(slot), let scene = sceneDeck[slot] else { return }
+        guard sceneLaunchQuantization == .immediate else {
+            queuedSceneSlot = slot
+            status = "Queued Scene \(slot + 1) for \(sceneLaunchQuantization.shortLabel)"
+            return
+        }
+
+        launchScene(scene, slot: slot)
+    }
+
+    private func launchSceneIfAvailable(slot: Int) {
+        guard sceneDeck.indices.contains(slot), let scene = sceneDeck[slot] else { return }
+        launchScene(scene, slot: slot)
+    }
+
+    private func launchScene(_ scene: LightSceneSnapshot, slot: Int) {
         selectedPreset = scene.preset
         selectedFamily = scene.preset.family
         lightSynthMode = scene.lightSynthMode
@@ -613,7 +673,24 @@ final class AppModel: ObservableObject {
         cameraChromaShift = scene.cameraChromaShift
         cameraMirror = scene.cameraMirror
         photonDirectorEnabled = false
-        status = "Recalled Scene \(slot + 1)"
+        queuedSceneSlot = nil
+        sceneCutTime = Date().timeIntervalSinceReferenceDate
+        status = "Launched Scene \(slot + 1)"
+    }
+
+    private func launchQueuedSceneIfNeeded() {
+        guard let slot = queuedSceneSlot else { return }
+        let interval = sceneLaunchQuantization.beatInterval
+        guard interval > 0 else {
+            launchSceneIfAvailable(slot: slot)
+            return
+        }
+
+        let seconds = Date().timeIntervalSinceReferenceDate
+        let beat = Int(floor(seconds * sequencer.bpm / 60.0))
+        guard beat != lastQueuedSceneBeat, beat % interval == 0 else { return }
+        lastQueuedSceneBeat = beat
+        launchSceneIfAvailable(slot: slot)
     }
 
     func setSceneMorph(_ amount: Double) {
@@ -658,6 +735,57 @@ final class AppModel: ObservableObject {
             }
         }
         status = "Generated 8-scene performance deck"
+    }
+
+    func applyProductionSafeOutput() {
+        flashSafety = true
+        masterLevel = 0.52
+        masterDrive = 0.12
+        stereoWidth = 0.58
+        limiterCeiling = 0.84
+        limiterRelease = 0.44
+        bloom = 0.28
+        exposure = 0.56
+        visualOutputGain = 0.74
+        visualSoftClip = 0.70
+        mixer.fxReturn.level = 0.34
+        status = "Applied producer-safe output"
+        pushAudioState()
+    }
+
+    func applyWideStageMix() {
+        mixer.bass = MixerChannel(level: 0.80, pan: -0.18, send: 0.22)
+        mixer.lead = MixerChannel(level: 0.74, pan: 0.22, send: 0.38)
+        mixer.drums = MixerChannel(level: 0.88, pan: 0.0, send: 0.16)
+        mixer.liveKeys = MixerChannel(level: 0.70, pan: 0.0, send: 0.28)
+        mixer.fxReturn = MixerChannel(level: 0.46, pan: 0.0, send: 0.0)
+        stereoWidth = 0.78
+        masterDrive = 0.16
+        status = "Applied wide-stage mix"
+        pushAudioState()
+    }
+
+    func applyVisualizerMax() {
+        audioVisualizerMode = .hyperAnalyzer
+        audioVisualizerIntensity = 0.92
+        audioVisualizerDetail = 0.88
+        audioVisualizerPersistence = 0.62
+        lightSynthIntensity = min(1.0, max(lightSynthIntensity, 0.74))
+        experimentalVideoIntensity = min(1.0, max(experimentalVideoIntensity, 0.62))
+        visualOutputGain = min(0.92, max(visualOutputGain, 0.82))
+        visualSoftClip = min(0.86, max(visualSoftClip, 0.68))
+        status = "Visualizer max enabled"
+    }
+
+    func applyVisualizerFocus() {
+        audioVisualizerMode = .spectrumTunnel
+        audioVisualizerIntensity = 0.58
+        audioVisualizerDetail = 0.50
+        audioVisualizerPersistence = 0.32
+        bloom = min(bloom, 0.34)
+        exposure = min(exposure, 0.60)
+        flashSafety = true
+        status = "Visualizer focus enabled"
     }
 
     private func makeSceneSnapshot(name: String) -> LightSceneSnapshot {
@@ -735,9 +863,23 @@ final class AppModel: ObservableObject {
             bassVoice: bassVoice,
             leadVoice: leadVoice,
             delaySettings: delaySettings,
+            mixer: mixer,
             liveNotes: liveNotes,
-            masterLevel: masterLevel
+            masterLevel: masterLevel,
+            masterDrive: masterDrive,
+            stereoWidth: stereoWidth,
+            limiterCeiling: limiterCeiling,
+            limiterRelease: limiterRelease
         )
+    }
+
+    private func startAudioMetering() {
+        guard audioMeterTimer == nil else { return }
+        audioMeterTimer = Timer.scheduledTimer(withTimeInterval: 0.10, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshAudioMeter()
+            }
+        }
     }
 
     func recordMP4() {
@@ -824,7 +966,22 @@ final class AppModel: ObservableObject {
         broadcastSettings.ingestURL = target.defaultURL
         broadcastSettings.frameRate = target.recommendedFrameRate
         broadcastSettings.bitrateKbps = target.recommendedBitrateKbps
-        status = target == .facebook ? "Facebook Live selected: using 30 fps, AAC stereo 44.1 kHz / 128 kbps" : "Broadcast target set to \(target.rawValue)"
+        if target == .facebook {
+            broadcastSettings.facebookCompatibilityMode = true
+            recordingResolution = target.recommendedResolution
+            broadcastSettings.sourceMode = .trueLive
+            status = "Facebook Live selected: RTMPS 443, 720p30, H.264/AAC, 2s keyframes"
+        } else {
+            status = "Broadcast target set to \(target.rawValue)"
+        }
+    }
+
+    func applyFacebookLiveSafeSetup() {
+        applyBroadcastTarget(.facebook)
+        broadcastSettings.audioMode = .desktopStereoMix
+        broadcastSettings.loopLatestRecording = true
+        recordingResolution = .hd720
+        status = "Facebook Safe Setup ready: paste Live Producer URL/key, route desktop audio, then Start Broadcast"
     }
 
     func listBroadcastAudioDevices() {
@@ -861,6 +1018,7 @@ final class AppModel: ObservableObject {
 
     func startBroadcast() {
         guard !isBroadcasting else { return }
+        guard validateBroadcastSettings() else { return }
 
         do {
             switch broadcastSettings.sourceMode {
@@ -886,7 +1044,8 @@ final class AppModel: ObservableObject {
             }
             isBroadcasting = true
             let audioSummary = broadcastSettings.audioMode == .desktopStereoMix ? "audio from \(BroadcastAudioInput.previewName(settings: broadcastSettings))" : "silent stereo audio"
-            status = broadcastSettings.sourceMode == .trueLive ? "Broadcasting true live output with \(audioSummary)" : "Broadcasting latest MP4 with \(audioSummary)"
+            let targetSummary = broadcastSettings.target == .facebook ? "Facebook Live" : broadcastSettings.target.rawValue
+            status = broadcastSettings.sourceMode == .trueLive ? "Broadcasting true live output to \(targetSummary) with \(audioSummary)" : "Broadcasting latest MP4 to \(targetSummary) with \(audioSummary)"
         } catch {
             isBroadcasting = false
             status = "Broadcast failed: \(error.localizedDescription)"
@@ -921,6 +1080,27 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private func validateBroadcastSettings() -> Bool {
+        let ingest = broadcastSettings.ingestURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = broadcastSettings.streamKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            status = "Broadcast failed: paste the Facebook Live stream key first"
+            return false
+        }
+        if broadcastSettings.target == .facebook {
+            guard ingest.hasPrefix("rtmps://") || ingest.hasPrefix("rtmp://") else {
+                status = "Facebook failed: ingest URL must start with rtmps://live-api-s.facebook.com:443/rtmp"
+                return false
+            }
+            if broadcastSettings.facebookCompatibilityMode {
+                recordingResolution = .hd720
+                broadcastSettings.frameRate = 30
+                broadcastSettings.bitrateKbps = min(6000, max(2500, broadcastSettings.bitrateKbps))
+            }
+        }
+        return true
     }
 
     func latestRecordingURL() -> URL? {

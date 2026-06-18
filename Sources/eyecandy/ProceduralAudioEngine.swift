@@ -7,12 +7,18 @@ final class ProceduralAudioEngine {
         var bassVoice = SynthVoice()
         var leadVoice = SynthVoice(instrument: .syncLead, level: 0.30, octave: 4, cutoff: 0.68, resonance: 0.18, glide: 0.08, accent: 0.45)
         var delaySettings = MultiTapDelaySettings()
+        var mixer = AudioMixerState()
         var liveNotes: Set<Int> = []
         var masterLevel = 0.55
+        var masterDrive = 0.18
+        var stereoWidth = 0.62
+        var limiterCeiling = 0.92
+        var limiterRelease = 0.38
     }
 
     private let engine = AVAudioEngine()
     private let lock = NSLock()
+    private let meterLock = NSLock()
     private var state = RenderState()
     private var sourceNode: AVAudioSourceNode?
     private var sampleTime = 0.0
@@ -47,6 +53,21 @@ final class ProceduralAudioEngine {
     private let sampleRate = 44_100.0
     private var delayBuffer = Array(repeating: 0.0, count: 44_100 * 8)
     private var delayWriteIndex = 0
+    private var limiterGain = 1.0
+    private var meterPeakLeft = 0.0
+    private var meterPeakRight = 0.0
+    private var meterLimiterReduction = 0.0
+    private var meterLimitedFrames = 0
+    private var meterBass = 0.0
+    private var meterMid = 0.0
+    private var meterTreble = 0.0
+    private var meterTransient = 0.0
+    private var meterSpectralFlux = 0.0
+    private var meterSpectralCentroid = 0.0
+    private var meterStereoBalance = 0.0
+    private var previousBass = 0.0
+    private var previousMid = 0.0
+    private var previousTreble = 0.0
 
     var isRunning: Bool { engine.isRunning }
 
@@ -72,15 +93,49 @@ final class ProceduralAudioEngine {
         engine.stop()
     }
 
-    func update(sequencer: SequencerState, bassVoice: SynthVoice, leadVoice: SynthVoice, delaySettings: MultiTapDelaySettings, liveNotes: Set<Int>, masterLevel: Double) {
+    func update(sequencer: SequencerState, bassVoice: SynthVoice, leadVoice: SynthVoice, delaySettings: MultiTapDelaySettings, mixer: AudioMixerState, liveNotes: Set<Int>, masterLevel: Double, masterDrive: Double, stereoWidth: Double, limiterCeiling: Double, limiterRelease: Double) {
         lock.lock()
         state.sequencer = sequencer
         state.bassVoice = bassVoice
         state.leadVoice = leadVoice
         state.delaySettings = delaySettings
+        state.mixer = mixer
         state.liveNotes = liveNotes
         state.masterLevel = masterLevel
+        state.masterDrive = masterDrive
+        state.stereoWidth = stereoWidth
+        state.limiterCeiling = limiterCeiling
+        state.limiterRelease = limiterRelease
         lock.unlock()
+    }
+
+    func meterSnapshot() -> AudioMeterSnapshot {
+        meterLock.lock()
+        let snapshot = AudioMeterSnapshot(
+            peakLeft: meterPeakLeft,
+            peakRight: meterPeakRight,
+            limiterReduction: meterLimiterReduction,
+            limitedFrames: meterLimitedFrames,
+            bass: meterBass,
+            mid: meterMid,
+            treble: meterTreble,
+            transient: meterTransient,
+            spectralFlux: meterSpectralFlux,
+            spectralCentroid: meterSpectralCentroid,
+            stereoBalance: meterStereoBalance
+        )
+        meterPeakLeft *= 0.82
+        meterPeakRight *= 0.82
+        meterLimiterReduction *= 0.86
+        meterBass *= 0.86
+        meterMid *= 0.86
+        meterTreble *= 0.86
+        meterTransient *= 0.72
+        meterSpectralFlux *= 0.76
+        meterStereoBalance *= 0.90
+        meterLimitedFrames = 0
+        meterLock.unlock()
+        return snapshot
     }
 
     private func render(frameCount: Int, audioBufferList: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
@@ -107,21 +162,27 @@ final class ProceduralAudioEngine {
 
             updateDrumRatchets(stepPhase: stepPhase)
 
-            var sample = 0.0
+            var bass = 0.0
+            var lead = 0.0
+            var drums = 0.0
             if snapshot.sequencer.isPlaying {
                 let bassStep = laneStep(snapshot.sequencer.bass, absoluteStep: absoluteStep)
                 let leadStep = laneStep(snapshot.sequencer.lead, absoluteStep: absoluteStep)
-                sample += synthSample(lane: snapshot.sequencer.bass, voice: snapshot.bassVoice, step: bassStep, phase: stepPhase, phaseStore: &bassPhase, filterState: &bassFilterState, baseNote: 36, active: activeBassStep, velocity: bassStepVelocity, ratchet: bassRatchet)
-                sample += synthSample(lane: snapshot.sequencer.lead, voice: snapshot.leadVoice, step: leadStep, phase: stepPhase, phaseStore: &leadPhase, filterState: &leadFilterState, baseNote: 60, active: activeLeadStep, velocity: leadStepVelocity, ratchet: leadRatchet)
-                sample += drumSample()
+                bass = synthSample(lane: snapshot.sequencer.bass, voice: snapshot.bassVoice, step: bassStep, phase: stepPhase, phaseStore: &bassPhase, filterState: &bassFilterState, baseNote: 36, active: activeBassStep, velocity: bassStepVelocity, ratchet: bassRatchet)
+                lead = synthSample(lane: snapshot.sequencer.lead, voice: snapshot.leadVoice, step: leadStep, phase: stepPhase, phaseStore: &leadPhase, filterState: &leadFilterState, baseNote: 60, active: activeLeadStep, velocity: leadStepVelocity, ratchet: leadRatchet)
+                drums = drumSample()
             }
-            sample += liveKeyboardSample(notes: snapshot.liveNotes)
-            sample = applyMultiTapDelay(sample, settings: snapshot.delaySettings, secondsPerBeat: 60.0 / max(40.0, snapshot.sequencer.bpm))
-            sample = tanh(sample * snapshot.masterLevel)
+            let live = liveKeyboardSample(notes: snapshot.liveNotes)
+            let mixed = applyMixer(bass: bass, lead: lead, drums: drums, live: live, snapshot: snapshot)
+            let delayed = applyMultiTapDelay(mixed.delaySend, settings: snapshot.delaySettings, secondsPerBeat: 60.0 / max(40.0, snapshot.sequencer.bpm))
+            let fxGain = busGain(snapshot.mixer.fxReturn, anySolo: mixerHasSolo(snapshot.mixer))
+            let fxStereo = panSample(delayed * fxGain, pan: snapshot.mixer.fxReturn.pan * (0.35 + snapshot.stereoWidth * 0.65))
+            let mastered = applyMaster(left: mixed.left + fxStereo.left, right: mixed.right + fxStereo.right, snapshot: snapshot)
+            updateAnalyzer(bass: bass, lead: lead, drums: drums, live: live, delay: delayed, left: mastered.left, right: mastered.right)
 
-            for buffer in buffers {
+            for (index, buffer) in buffers.enumerated() {
                 let pointer = buffer.mData!.assumingMemoryBound(to: Float.self)
-                pointer[frame] = Float(sample)
+                pointer[frame] = Float(index == 0 ? mastered.left : mastered.right)
             }
             sampleTime += 1.0 / sampleRate
         }
@@ -319,7 +380,7 @@ final class ProceduralAudioEngine {
         guard settings.enabled else {
             delayBuffer[delayWriteIndex] = input
             delayWriteIndex = (delayWriteIndex + 1) % delayBuffer.count
-            return input
+            return 0
         }
 
         var wet = 0.0
@@ -337,7 +398,107 @@ final class ProceduralAudioEngine {
         delayWriteIndex = (delayWriteIndex + 1) % delayBuffer.count
 
         let wetMix = min(1, max(0, settings.wet))
-        return input * (1.0 - wetMix * 0.55) + wet * wetMix
+        return wet * wetMix
+    }
+
+    private func applyMixer(bass: Double, lead: Double, drums: Double, live: Double, snapshot: RenderState) -> (left: Double, right: Double, delaySend: Double) {
+        let anySolo = mixerHasSolo(snapshot.mixer)
+        let width = 0.35 + min(1.0, max(0.0, snapshot.stereoWidth)) * 0.65
+
+        let bassStereo = mixChannel(sample: bass, channel: snapshot.mixer.bass, anySolo: anySolo, width: width)
+        let leadStereo = mixChannel(sample: lead, channel: snapshot.mixer.lead, anySolo: anySolo, width: width)
+        let drumStereo = mixChannel(sample: drums, channel: snapshot.mixer.drums, anySolo: anySolo, width: width)
+        let liveStereo = mixChannel(sample: live, channel: snapshot.mixer.liveKeys, anySolo: anySolo, width: width)
+
+        let left = bassStereo.left + leadStereo.left + drumStereo.left + liveStereo.left
+        let right = bassStereo.right + leadStereo.right + drumStereo.right + liveStereo.right
+        let delaySend = bassStereo.send + leadStereo.send + drumStereo.send + liveStereo.send
+        return (left, right, delaySend)
+    }
+
+    private func mixChannel(sample: Double, channel: MixerChannel, anySolo: Bool, width: Double) -> (left: Double, right: Double, send: Double) {
+        let gain = busGain(channel, anySolo: anySolo)
+        guard gain > 0.000_1 else { return (0, 0, 0) }
+        let scaled = sample * gain
+        let stereo = panSample(scaled, pan: channel.pan * width)
+        return (stereo.left, stereo.right, scaled * min(1.0, max(0.0, channel.send)))
+    }
+
+    private func mixerHasSolo(_ mixer: AudioMixerState) -> Bool {
+        mixer.bass.solo || mixer.lead.solo || mixer.drums.solo || mixer.liveKeys.solo || mixer.fxReturn.solo
+    }
+
+    private func busGain(_ channel: MixerChannel, anySolo: Bool) -> Double {
+        if channel.muted { return 0 }
+        if anySolo && !channel.solo { return 0 }
+        return min(1.25, max(0.0, channel.level))
+    }
+
+    private func panSample(_ sample: Double, pan: Double) -> (left: Double, right: Double) {
+        let clampedPan = clamp(pan, min: -1.0, max: 1.0)
+        let angle = (clampedPan + 1.0) * Double.pi / 4.0
+        return (sample * cos(angle), sample * sin(angle))
+    }
+
+    private func applyMaster(left: Double, right: Double, snapshot: RenderState) -> (left: Double, right: Double) {
+        let level = min(1.0, max(0.0, snapshot.masterLevel))
+        let drive = 1.0 + min(1.0, max(0.0, snapshot.masterDrive)) * 5.0
+        let ceiling = min(0.98, max(0.30, snapshot.limiterCeiling))
+        let release = 0.0008 + min(1.0, max(0.0, snapshot.limiterRelease)) * 0.012
+
+        let drivenLeft = tanh(left * drive) * level
+        let drivenRight = tanh(right * drive) * level
+        let peak = max(abs(drivenLeft), abs(drivenRight))
+        let targetGain = peak > ceiling ? ceiling / max(peak, 0.000_001) : 1.0
+        if targetGain < limiterGain {
+            limiterGain = targetGain
+        } else {
+            limiterGain += (1.0 - limiterGain) * release
+        }
+
+        let outLeft = clamp(drivenLeft * limiterGain, min: -ceiling, max: ceiling)
+        let outRight = clamp(drivenRight * limiterGain, min: -ceiling, max: ceiling)
+        updateMeters(left: outLeft, right: outRight, reduction: 1.0 - limiterGain, limited: targetGain < 0.999)
+        return (outLeft, outRight)
+    }
+
+    private func updateMeters(left: Double, right: Double, reduction: Double, limited: Bool) {
+        meterLock.lock()
+        meterPeakLeft = max(meterPeakLeft, abs(left))
+        meterPeakRight = max(meterPeakRight, abs(right))
+        meterLimiterReduction = max(meterLimiterReduction, reduction)
+        if limited {
+            meterLimitedFrames += 1
+        }
+        meterLock.unlock()
+    }
+
+    private func updateAnalyzer(bass: Double, lead: Double, drums: Double, live: Double, delay: Double, left: Double, right: Double) {
+        let bassBand = clamp(abs(bass) * 1.75 + abs(kickEnv) * 0.72, min: 0, max: 1)
+        let midBand = clamp(abs(lead) * 1.35 + abs(snareEnv) * 0.44 + abs(live) * 0.85 + abs(delay) * 0.22, min: 0, max: 1)
+        let trebleBand = clamp(abs(hatEnv) * 1.4 + abs(clapEnv) * 0.58 + abs(lead) * 0.36 + abs(delay) * 0.18, min: 0, max: 1)
+        let flux = max(0.0, bassBand - previousBass) + max(0.0, midBand - previousMid) + max(0.0, trebleBand - previousTreble)
+        previousBass += (bassBand - previousBass) * 0.12
+        previousMid += (midBand - previousMid) * 0.12
+        previousTreble += (trebleBand - previousTreble) * 0.12
+
+        let energy = bassBand + midBand + trebleBand + 0.000_1
+        let centroid = (bassBand * 0.16 + midBand * 0.52 + trebleBand * 0.92) / energy
+        let balance = clamp((abs(right) - abs(left)) * 1.6, min: -1, max: 1)
+
+        meterLock.lock()
+        meterBass = max(meterBass, bassBand)
+        meterMid = max(meterMid, midBand)
+        meterTreble = max(meterTreble, trebleBand)
+        meterTransient = max(meterTransient, clamp(flux * 0.75, min: 0, max: 1))
+        meterSpectralFlux = max(meterSpectralFlux, clamp(flux * 0.55, min: 0, max: 1))
+        meterSpectralCentroid += (centroid - meterSpectralCentroid) * 0.10
+        meterStereoBalance += (balance - meterStereoBalance) * 0.08
+        meterLock.unlock()
+    }
+
+    private func clamp(_ value: Double, min lower: Double, max upper: Double) -> Double {
+        Swift.min(upper, Swift.max(lower, value))
     }
 
     private func swungStepPosition(time: Double, secondsPerStep: Double, sequencer: SequencerState) -> Double {

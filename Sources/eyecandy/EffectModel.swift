@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 enum InspectorPanel: String, CaseIterable, Identifiable {
+    case studio = "Studio"
     case presets = "Presets"
     case sequencer = "Sequencer"
     case synth = "Synth"
@@ -98,6 +99,17 @@ enum LightSynthMode: String, CaseIterable, Identifiable {
     case photonStorm = "Photon Storm"
     case neuralMandala = "Neural Mandala"
     case everything = "Everything"
+
+    var id: String { rawValue }
+}
+
+enum AudioVisualizerMode: String, CaseIterable, Identifiable {
+    case off = "Off"
+    case spectrumTunnel = "Spectrum Tunnel"
+    case oscilloscopeGarden = "Oscilloscope Garden"
+    case chromaVectorscope = "Chroma Vectorscope"
+    case spectralParticles = "Spectral Particles"
+    case hyperAnalyzer = "Hyper Analyzer"
 
     var id: String { rawValue }
 }
@@ -238,6 +250,66 @@ enum CameraFeedbackMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SceneLaunchQuantization: String, CaseIterable, Identifiable {
+    case immediate = "Immediate"
+    case nextBeat = "Next Beat"
+    case nextBar = "Next Bar"
+    case fourBars = "4 Bars"
+
+    var id: String { rawValue }
+
+    var beatInterval: Int {
+        switch self {
+        case .immediate:
+            return 0
+        case .nextBeat:
+            return 1
+        case .nextBar:
+            return 4
+        case .fourBars:
+            return 16
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .immediate:
+            return "Now"
+        case .nextBeat:
+            return "Beat"
+        case .nextBar:
+            return "Bar"
+        case .fourBars:
+            return "4 Bars"
+        }
+    }
+}
+
+enum AutopilotSource: String, CaseIterable, Identifiable {
+    case presets = "Preset List"
+    case sceneDeck = "Scene Deck"
+
+    var id: String { rawValue }
+}
+
+enum DeckTravelMode: String, CaseIterable, Identifiable {
+    case forward = "Forward"
+    case pingPong = "Ping-Pong"
+    case random = "Random"
+
+    var id: String { rawValue }
+}
+
+enum GrooveFXMode: String, CaseIterable, Identifiable {
+    case off = "Off"
+    case fourOnFloor = "4-on-the-floor Pump"
+    case eighths = "Eighth Pump"
+    case triplets = "Triplet Pump"
+    case syncopated = "Syncopated Gate"
+
+    var id: String { rawValue }
+}
+
 struct VideoPerformancePreset: Identifiable, Hashable {
     let id = UUID()
     var name: String
@@ -293,6 +365,16 @@ struct LightSceneSnapshot: Identifiable, Hashable {
     var cameraMirror: Bool
 }
 
+struct PatternSnapshot: Identifiable, Hashable {
+    let id = UUID()
+    var name: String
+    var sequencer: SequencerState
+    var bassVoice: SynthVoice
+    var leadVoice: SynthVoice
+    var delaySettings: MultiTapDelaySettings
+    var mixer: AudioMixerState
+}
+
 struct MinterPresetProfile: Hashable {
     var minterMode: MinterEffectMode
     var visualEngine: VisualEngineMode
@@ -330,6 +412,20 @@ struct MultiTapDelaySettings: Hashable {
     ]
 }
 
+struct AudioMeterSnapshot: Hashable {
+    var peakLeft = 0.0
+    var peakRight = 0.0
+    var limiterReduction = 0.0
+    var limitedFrames = 0
+    var bass = 0.0
+    var mid = 0.0
+    var treble = 0.0
+    var transient = 0.0
+    var spectralFlux = 0.0
+    var spectralCentroid = 0.0
+    var stereoBalance = 0.0
+}
+
 enum BroadcastTarget: String, CaseIterable, Identifiable {
     case youtube = "YouTube Live"
     case facebook = "Facebook Live"
@@ -360,9 +456,18 @@ enum BroadcastTarget: String, CaseIterable, Identifiable {
     var recommendedBitrateKbps: Int {
         switch self {
         case .facebook:
-            return 6000
+            return 4500
         case .youtube, .custom:
             return 6000
+        }
+    }
+
+    var recommendedResolution: RecordingResolution {
+        switch self {
+        case .facebook:
+            return .hd720
+        case .youtube, .custom:
+            return .hd720
         }
     }
 
@@ -409,6 +514,7 @@ struct BroadcastSettings: Hashable {
     var bitrateKbps = 6000
     var frameRate = 30
     var loopLatestRecording = true
+    var facebookCompatibilityMode = true
 }
 
 enum ModSource: String, CaseIterable, Identifiable {
@@ -452,6 +558,29 @@ struct ModSlot: Identifiable, Hashable {
     var destination: ModDestination = .warp
     var amount = 0.35
     var rate = 0.25
+}
+
+struct MixerChannel: Hashable {
+    var level = 0.8
+    var pan = 0.0
+    var send = 0.3
+    var muted = false
+    var solo = false
+}
+
+struct AudioMixerState: Hashable {
+    var bass = MixerChannel(level: 0.82, pan: -0.14, send: 0.24)
+    var lead = MixerChannel(level: 0.72, pan: 0.12, send: 0.34)
+    var drums = MixerChannel(level: 0.86, pan: 0.0, send: 0.18)
+    var liveKeys = MixerChannel(level: 0.68, pan: 0.0, send: 0.30)
+    var fxReturn = MixerChannel(level: 0.42, pan: 0.0, send: 0.0)
+}
+
+struct GrooveFXState: Hashable {
+    var mode: GrooveFXMode = .off
+    var amount = 0.38
+    var curve = 0.58
+    var stereoSkew = 0.18
 }
 
 struct SynthVoice: Hashable {

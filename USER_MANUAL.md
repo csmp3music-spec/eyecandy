@@ -197,7 +197,7 @@ The post-2000 glitch modes are playable approximations of underground VJ and gli
 
 ### Feedback / Camera
 
-The Feedback / Camera panel captures a live camera feed and composites it over the generated visuals. Pointing the camera at the screen creates physical optical feedback. Feedback modes include Optical Screen Loop, Echo Tunnel, Slit Echo, Luma Key Overlay, and Chroma Wash. Camera Opacity, Feedback Depth, Feedback Scale, Feedback Rotation, Luma Threshold, Chroma Shift, and Mirror Camera control how strongly the captured image folds back into the light-synth output.
+The Feedback / Camera panel captures a live camera feed and composites it over the generated visuals. Pointing the camera at the screen creates physical optical feedback. The Camera Source menu chooses a specific AVFoundation video device by stable device ID, and Refresh rescans built-in and external cameras when a USB capture device or webcam is connected during a set. Feedback modes include Optical Screen Loop, Echo Tunnel, Slit Echo, Luma Key Overlay, and Chroma Wash. Camera Opacity, Feedback Depth, Feedback Scale, Feedback Rotation, Luma Threshold, Chroma Shift, and Mirror Camera control how strongly the captured image folds back into the light-synth output.
 
 ### Video Performance Presets
 
@@ -587,11 +587,31 @@ Each slot has amount and rate controls.
 
 ## 14. Output Panel
 
-The Output panel controls recording and final image behavior.
+The Output panel controls recording, final image behavior, and the synth master output stage.
 
 ### Master Level
 
 Controls audio output level.
+
+### Master Drive
+
+Adds pre-limiter saturation for louder, denser synth and drum output.
+
+### Stereo Width
+
+Spreads lead, live keyboard, drum ambience, and delay returns across the stereo field. Lower values keep the synth closer to mono; higher values create a wider broadcast/recording monitor image.
+
+### Limiter Ceiling
+
+Sets the maximum sample level for the master safety limiter. Lower this when feeding a broadcast chain or virtual stereo mix device that clips easily.
+
+### Limiter Release
+
+Controls how quickly the limiter returns to unity gain after loud hits.
+
+### Audio Meter
+
+Shows left/right output peaks, gain reduction, and limiter hit count. Gain reduction means the limiter is actively preventing overload.
 
 ### Bloom
 
@@ -650,6 +670,22 @@ Typical workflow:
 The stream key is held in memory only. True Live Output sends raw generated BGRA frames to `ffmpeg` over stdin and publishes RTMP/RTMPS without reading from an MP4 file. Loop Latest MP4 keeps the previous file-based broadcast path.
 
 Broadcast audio can use Silent mode or Desktop Stereo Mix mode. Desktop Stereo Mix captures a named AVFoundation audio input such as `BlackHole 2ch`; route macOS system output to that virtual/aggregate device to include all desktop audio in the stream. Use List audio devices in the Broadcast panel to see the exact device names ffmpeg can open. Facebook Live uses 30 fps plus AAC stereo at 44.1 kHz / 128 kbps; YouTube/custom targets use AAC stereo at 48 kHz / 192 kbps. If ffmpeg cannot open the selected desktop-mix device, the app status now reports the AVFoundation/audio error instead of silently hiding it.
+
+### Facebook Live Safe Setup
+
+Choose Facebook Live or press Facebook Safe Setup before starting a Facebook broadcast. This forces the safest ingest profile:
+
+- RTMPS ingest on `live-api-s.facebook.com:443/rtmp`
+- True Live Output
+- 1280 x 720
+- 30 fps
+- H.264 Main profile
+- 2-second keyframes
+- yuv420p BT.709 video
+- AAC-LC stereo at 44.1 kHz / 128 kbps
+- 2500-6000 kbps video bitrate clamp
+
+Use Facebook Live Producer, paste the RTMPS server URL and stream key into the app, start the app broadcast, wait for preview in Facebook, then click Go Live in Facebook. If Facebook reports no audio, confirm macOS is routed into the named desktop stereo mix device and that the same device name appears from List audio devices.
 
 ## 16. MP4 Recording Notes
 

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -14,12 +15,15 @@ struct ContentView: View {
                 header
 
                 topOptionMenus
+                quickPanelGrid
+                liveStatusStrip
 
-                ScrollView(.vertical) {
+                InspectorScrollView {
                     inspectorPanelContent
                         .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.trailing, 10)
+                        .padding(.bottom, 16)
                 }
-                .scrollIndicators(.visible)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .padding(16)
@@ -30,13 +34,20 @@ struct ContentView: View {
         .onChange(of: model.bassVoice) { _ in model.pushAudioState() }
         .onChange(of: model.leadVoice) { _ in model.pushAudioState() }
         .onChange(of: model.delaySettings) { _ in model.pushAudioState() }
+        .onChange(of: model.mixer) { _ in model.pushAudioState() }
         .onChange(of: model.masterLevel) { _ in model.pushAudioState() }
+        .onChange(of: model.masterDrive) { _ in model.pushAudioState() }
+        .onChange(of: model.stereoWidth) { _ in model.pushAudioState() }
+        .onChange(of: model.limiterCeiling) { _ in model.pushAudioState() }
+        .onChange(of: model.limiterRelease) { _ in model.pushAudioState() }
         .onAppear { model.startAudio() }
     }
 
     @ViewBuilder
     private var inspectorPanelContent: some View {
         switch model.selectedPanel {
+        case .studio:
+            studioPanel
         case .presets:
             presetPanel
         case .sequencer:
@@ -64,18 +75,84 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("sonic screwdriver eyecandy")
-                .font(.title2.bold())
+            HStack(alignment: .firstTextBaseline) {
+                Text("sonic screwdriver eyecandy")
+                    .font(.title2.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Spacer()
+                Text(model.selectedPanel.rawValue)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             Text(model.status)
                 .foregroundStyle(.secondary)
                 .font(.caption)
-            HStack {
-                Button("Start Audio") { model.startAudio() }
-                Button("Stop") { model.stopAudio() }
-                Button("Random Visual") { model.randomizeVisual() }
-                Button("Regenerate") { model.regenerateVisualScene() }
+                .lineLimit(2)
+            HStack(spacing: 8) {
+                Button { model.startAudio() } label: {
+                    Label("Start", systemImage: "play.fill")
+                }
+                Button { model.stopAudio() } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                Button { model.randomizeVisual() } label: {
+                    Label("Random", systemImage: "shuffle")
+                }
+                Button { model.regenerateVisualScene() } label: {
+                    Label("Regen", systemImage: "arrow.triangle.2.circlepath")
+                }
             }
+            .controlSize(.small)
         }
+    }
+
+    private var quickPanelGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+            quickPanelButton(.studio, "Studio", "dial.medium")
+            quickPanelButton(.lightSynth, "Visual", "camera.filters")
+            quickPanelButton(.sequencer, "Seq", "square.grid.4x3.fill")
+            quickPanelButton(.synth, "Synth", "waveform")
+            quickPanelButton(.performance, "Perf", "bolt.fill")
+            quickPanelButton(.output, "Output", "slider.horizontal.3")
+        }
+    }
+
+    private func quickPanelButton(_ panel: InspectorPanel, _ title: String, _ systemImage: String) -> some View {
+        Button {
+            model.selectedPanel = panel
+        } label: {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(model.selectedPanel == panel ? .cyan : .secondary)
+        .controlSize(.small)
+    }
+
+    private var liveStatusStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                statusCapsule("\(Int(model.sequencer.bpm)) BPM", color: .cyan)
+                statusCapsule(model.audioVisualizerMode.rawValue, color: .pink)
+                statusCapsule(model.paletteMode.rawValue, color: .orange)
+            }
+            meterRow("Audio", value: max(model.audioMeter.peakLeft, model.audioMeter.peakRight))
+            meterRow("Flux", value: model.audioMeter.spectralFlux)
+        }
+        .padding(10)
+        .background(.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func statusCapsule(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.14), in: Capsule())
+            .foregroundStyle(color)
     }
 
     private var topOptionMenus: some View {
@@ -106,6 +183,9 @@ struct ContentView: View {
                     Menu("Engine") {
                         optionButtons(VisualEngineMode.allCases, selection: $model.visualEngineMode)
                     }
+                    Menu("Audio Visualizer") {
+                        optionButtons(AudioVisualizerMode.allCases, selection: $model.audioVisualizerMode)
+                    }
                     Menu("Palette") {
                         optionButtons(LightPaletteMode.allCases, selection: $model.paletteMode)
                     }
@@ -133,6 +213,26 @@ struct ContentView: View {
                 Menu {
                     optionButtons(ExperimentalVideoMode.allCases, selection: $model.experimentalVideoMode)
                     Divider()
+                    Menu("Camera Source") {
+                        if model.cameraInput.availableDevices.isEmpty {
+                            Button("No cameras found") {}
+                                .disabled(true)
+                        } else {
+                            ForEach(model.cameraInput.availableDevices) { device in
+                                Button {
+                                    model.selectCameraDevice(device.id)
+                                } label: {
+                                    if device.id == model.cameraInput.selectedDeviceID {
+                                        Label(device.displayName, systemImage: "checkmark")
+                                    } else {
+                                        Text(device.displayName)
+                                    }
+                                }
+                            }
+                        }
+                        Divider()
+                        Button("Refresh Cameras") { model.refreshCameraDevices() }
+                    }
                     Menu("Camera Feedback") {
                         optionButtons(CameraFeedbackMode.allCases, selection: $model.cameraFeedbackMode)
                     }
@@ -205,6 +305,7 @@ struct ContentView: View {
                         optionButtons(BroadcastAudioMode.allCases, selection: $model.broadcastSettings.audioMode)
                     }
                     Divider()
+                    Button("Facebook Safe Setup") { model.applyFacebookLiveSafeSetup() }
                     Button(model.isBroadcasting ? "Broadcasting..." : "Start Broadcast") { model.startBroadcast() }
                         .disabled(model.isBroadcasting || model.broadcastSettings.streamKey.isEmpty)
                     Button("Stop Broadcast") { model.stopBroadcast() }
@@ -241,14 +342,148 @@ struct ContentView: View {
         }
     }
 
+    private var studioPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelCard("Performance Deck", systemImage: "slider.horizontal.3") {
+                HStack {
+                    Button(model.sequencer.isPlaying ? "Stop Seq" : "Play Seq") {
+                        model.sequencer.isPlaying.toggle()
+                    }
+                    Button("Tap") { model.tapTempo() }
+                    Button("Random Visual") { model.randomizeVisual() }
+                    Button("Regenerate") { model.regenerateVisualScene() }
+                }
+                .controlSize(.small)
+
+                HStack {
+                    Text("Tempo \(Int(model.sequencer.bpm)) BPM")
+                        .font(.headline)
+                    Spacer()
+                    Text(model.tempoMode.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: bpmBinding, in: 40...240) { Text("Tempo") }
+
+                Picker("Scene launch", selection: $model.sceneLaunchQuantization) {
+                    ForEach(SceneLaunchQuantization.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if let queued = model.queuedSceneSlot {
+                    Text("Queued Scene \(queued + 1) for \(model.sceneLaunchQuantization.shortLabel)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 8) {
+                    ForEach(0..<8, id: \.self) { slot in
+                        Button {
+                            model.recallScene(slot: slot)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(model.sceneDeck[slot] == nil ? "Empty" : "Scene \(slot + 1)")
+                                    .font(.caption.weight(.semibold))
+                                Text(model.sceneDeck[slot]?.name ?? "Save in Light Synth")
+                                    .font(.caption2)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                        }
+                        .disabled(model.sceneDeck[slot] == nil)
+                        .buttonStyle(.bordered)
+                    }
+                }
+
+                HStack {
+                    Button("Generate Deck") { model.randomizeSceneDeck() }
+                    Button("Safe Output") { model.applyProductionSafeOutput() }
+                    Button("Wide Stage") { model.applyWideStageMix() }
+                }
+                .controlSize(.small)
+            }
+
+            panelCard("Mixer", systemImage: "music.note.list") {
+                mixerChannelEditor("Bass", channel: $model.mixer.bass, accent: .cyan)
+                mixerChannelEditor("Lead", channel: $model.mixer.lead, accent: .pink)
+                mixerChannelEditor("Drums", channel: $model.mixer.drums, accent: .orange)
+                mixerChannelEditor("Keys", channel: $model.mixer.liveKeys, accent: .green)
+                mixerChannelEditor("FX Return", channel: $model.mixer.fxReturn, accent: .purple, showSend: false)
+                VStack(alignment: .leading, spacing: 6) {
+                    meterRow("L", value: model.audioMeter.peakLeft)
+                    meterRow("R", value: model.audioMeter.peakRight)
+                    meterRow("GR", value: model.audioMeter.limiterReduction)
+                }
+            }
+
+            panelCard("Audio Visualizer", systemImage: "waveform.path.ecg") {
+                Picker("Mode", selection: $model.audioVisualizerMode) {
+                    ForEach(AudioVisualizerMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Slider(value: $model.audioVisualizerIntensity, in: 0...1) { Text("Intensity") }
+                Slider(value: $model.audioVisualizerDetail, in: 0...1) { Text("Detail") }
+                Slider(value: $model.audioVisualizerPersistence, in: 0...1) { Text("Persistence") }
+                VStack(alignment: .leading, spacing: 6) {
+                    meterRow("Bass", value: model.audioMeter.bass)
+                    meterRow("Mid", value: model.audioMeter.mid)
+                    meterRow("High", value: model.audioMeter.treble)
+                    meterRow("Flux", value: model.audioMeter.spectralFlux)
+                }
+                HStack {
+                    Button("Max") { model.applyVisualizerMax() }
+                    Button("Focus") { model.applyVisualizerFocus() }
+                }
+                .controlSize(.small)
+            }
+
+            panelCard("Visual Output", systemImage: "sun.max") {
+                Slider(value: $model.lightSynthIntensity, in: 0...1) { Text("Synth intensity") }
+                Slider(value: $model.experimentalVideoIntensity, in: 0...1) { Text("Video intensity") }
+                Slider(value: $model.bloom, in: 0...1) { Text("Bloom") }
+                Slider(value: $model.exposure, in: 0.1...1.2) { Text("Exposure") }
+                Slider(value: $model.visualOutputGain, in: 0.3...1.0) { Text("Visual gain") }
+                Slider(value: $model.visualSoftClip, in: 0.45...0.98) { Text("Visual soft clip") }
+                HStack {
+                    Toggle("Flash safety", isOn: $model.flashSafety)
+                    Spacer()
+                    Button("Safe Cruise") { model.setSafeCruise() }
+                    Button("Trip Max") { model.setTripMaximum() }
+                }
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private func panelCard<Content: View>(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+            content()
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+    }
+
     private var presetPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
+            TextField("Search visual presets", text: $model.visualPresetFilter)
+                .textFieldStyle(.roundedBorder)
             Picker("Family", selection: $model.selectedFamily) {
                 ForEach(PresetFamily.allCases) { family in
                     Text(family.rawValue).tag(family)
                 }
             }
             .pickerStyle(.menu)
+            Text("\(model.filteredPresets.count) of \(PresetLibrary.visualPresets.count) presets")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             LazyVStack(alignment: .leading, spacing: 6) {
                 ForEach(model.filteredPresets) { preset in
@@ -356,6 +591,13 @@ struct ContentView: View {
         Binding(
             get: { model.cameraInputEnabled },
             set: { model.setCameraInputEnabled($0) }
+        )
+    }
+
+    private var cameraDeviceBinding: Binding<String> {
+        Binding(
+            get: { model.cameraInput.selectedDeviceID },
+            set: { model.selectCameraDevice($0) }
         )
     }
 
@@ -476,6 +718,15 @@ struct ContentView: View {
                 }
             }
             .pickerStyle(.menu)
+            Picker("Audio visualizer", selection: $model.audioVisualizerMode) {
+                ForEach(AudioVisualizerMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            Slider(value: $model.audioVisualizerIntensity, in: 0...1) { Text("Visualizer intensity") }
+            Slider(value: $model.audioVisualizerDetail, in: 0...1) { Text("Visualizer detail") }
+            Slider(value: $model.audioVisualizerPersistence, in: 0...1) { Text("Visualizer persistence") }
             Slider(value: $model.experimentalVideoIntensity, in: 0...1) { Text("Video intensity") }
             Slider(value: $model.videoKeyThreshold, in: 0...1) { Text("Key threshold") }
             Slider(value: $model.videoEdgeGain, in: 0...1) { Text("Edge gain") }
@@ -584,6 +835,14 @@ struct ContentView: View {
                 .textFieldStyle(.roundedBorder)
             SecureField("Stream key", text: $model.broadcastSettings.streamKey)
                 .textFieldStyle(.roundedBorder)
+            if model.broadcastSettings.target == .facebook {
+                Toggle("Facebook compatibility mode", isOn: $model.broadcastSettings.facebookCompatibilityMode)
+                Button("Facebook Safe Setup") { model.applyFacebookLiveSafeSetup() }
+                    .controlSize(.small)
+                Text("Use Facebook Live Producer. Paste the RTMPS server URL and stream key, keep this app streaming, then click Go Live in Facebook.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Picker("Audio", selection: $model.broadcastSettings.audioMode) {
                 ForEach(BroadcastAudioMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -648,6 +907,22 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            HStack {
+                Picker("Camera source", selection: cameraDeviceBinding) {
+                    if model.cameraInput.availableDevices.isEmpty {
+                        Text("No cameras found").tag("")
+                    } else {
+                        ForEach(model.cameraInput.availableDevices) { device in
+                            Text(device.displayName).tag(device.id)
+                        }
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Button("Refresh") { model.refreshCameraDevices() }
+                    .controlSize(.small)
+            }
+
             Picker("Feedback mode", selection: $model.cameraFeedbackMode) {
                 ForEach(CameraFeedbackMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -683,6 +958,17 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Autopilot scene morphing", isOn: $model.autopilotEnabled)
             Stepper("Autopilot every \(model.autopilotBars) bars", value: $model.autopilotBars, in: 1...32)
+            Picker("Scene launch quantize", selection: $model.sceneLaunchQuantization) {
+                ForEach(SceneLaunchQuantization.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            if let queued = model.queuedSceneSlot {
+                Text("Queued Scene \(queued + 1)")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
 
             Divider()
 
@@ -769,8 +1055,33 @@ struct ContentView: View {
     private var outputPanel: some View {
             VStack(alignment: .leading, spacing: 12) {
                 Slider(value: $model.masterLevel, in: 0...1) { Text("Master level") }
+                Slider(value: $model.masterDrive, in: 0...1) { Text("Master drive") }
+                Slider(value: $model.stereoWidth, in: 0...1) { Text("Stereo width") }
+                Slider(value: $model.limiterCeiling, in: 0.3...0.98) { Text("Limiter ceiling") }
+                Slider(value: $model.limiterRelease, in: 0...1) { Text("Limiter release") }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Audio meter").font(.headline)
+                    meterRow("L", value: model.audioMeter.peakLeft)
+                    meterRow("R", value: model.audioMeter.peakRight)
+                    meterRow("GR", value: model.audioMeter.limiterReduction)
+                    meterRow("Bass", value: model.audioMeter.bass)
+                    meterRow("Mid", value: model.audioMeter.mid)
+                    meterRow("High", value: model.audioMeter.treble)
+                    meterRow("Flux", value: model.audioMeter.spectralFlux)
+                    Text("Limiter hits \(model.audioMeter.limitedFrames)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(model.audioMeter.limitedFrames > 0 ? .orange : .secondary)
+                }
                 Slider(value: $model.bloom, in: 0...1) { Text("Bloom") }
-                Slider(value: $model.exposure, in: 0.1...1.4) { Text("Exposure") }
+                Slider(value: $model.exposure, in: 0.1...1.2) { Text("Exposure") }
+                Slider(value: $model.visualOutputGain, in: 0.3...1.0) { Text("Visual gain") }
+                Slider(value: $model.visualSoftClip, in: 0.45...0.98) { Text("Visual soft clip") }
+
+                HStack {
+                    Button("Safe Output") { model.applyProductionSafeOutput() }
+                    Button("Wide Stage") { model.applyWideStageMix() }
+                }
+                .controlSize(.small)
 
                 Divider()
 
@@ -815,6 +1126,64 @@ struct ContentView: View {
                         .textSelection(.enabled)
                 }
             }
+    }
+
+    private func meterRow(_ label: String, value: Double) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption.monospaced())
+                .frame(width: 42, alignment: .leading)
+            ProgressView(value: min(1.0, max(0.0, value)), total: 1.0)
+                .progressViewStyle(.linear)
+            Text("\(Int(min(1.0, max(0.0, value)) * 100))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
+    }
+
+    private func mixerChannelEditor(_ title: String, channel: Binding<MixerChannel>, accent: Color, showSend: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Toggle("M", isOn: channel.muted)
+                    .toggleStyle(.button)
+                    .tint(.red)
+                    .controlSize(.mini)
+                Toggle("S", isOn: channel.solo)
+                    .toggleStyle(.button)
+                    .tint(.yellow)
+                    .controlSize(.mini)
+            }
+            Slider(value: channel.level, in: 0...1.2) { Text("Level") }
+                .tint(accent)
+            HStack {
+                Text("Pan")
+                    .font(.caption)
+                    .frame(width: 34, alignment: .leading)
+                Slider(value: channel.pan, in: -1...1)
+                Text(String(format: "%+.2f", channel.wrappedValue.pan))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+            }
+            if showSend {
+                HStack {
+                    Text("Send")
+                        .font(.caption)
+                        .frame(width: 34, alignment: .leading)
+                    Slider(value: channel.send, in: 0...1)
+                    Text("\(Int(channel.wrappedValue.send * 100))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+        }
+        .padding(10)
+        .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func laneEditor(title: String, lane: Binding<StepLane>) -> some View {
@@ -944,5 +1313,53 @@ struct ContentView: View {
 
     private func keyTint(_ midi: Int) -> Color {
         [1, 3, 6, 8, 10].contains(midi % 12) ? .purple : .blue
+    }
+}
+
+private struct InspectorScrollView<Content: View>: NSViewRepresentable {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerStyle = .legacy
+        scrollView.verticalScrollElasticity = .allowed
+        scrollView.horizontalScrollElasticity = .none
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = hostingView
+        context.coordinator.hostingView = hostingView
+
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            hostingView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
+        ])
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.hostingView?.rootView = content
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerStyle = .legacy
+    }
+
+    final class Coordinator {
+        var hostingView: NSHostingView<Content>?
     }
 }

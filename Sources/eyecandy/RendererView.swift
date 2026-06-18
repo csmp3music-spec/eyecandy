@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct RendererView: View {
@@ -15,6 +16,9 @@ struct RendererView: View {
                 HStack(spacing: 8) {
                     Text(model.selectedPreset.name)
                     Text("\(Int(model.sequencer.bpm)) BPM")
+                    if let queued = model.queuedSceneSlot {
+                        Text("Q\(queued + 1)")
+                    }
                     if model.autopilotEnabled { Text("AUTO") }
                     if model.modSlots.contains(where: \.enabled) { Text("MOD") }
                     Text("LIGHT")
@@ -51,6 +55,7 @@ struct RendererView: View {
         drawGridGlitch(context: &context, size: size, time: time, preset: preset)
         drawDemosceneLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawAdvancedLightSynthLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
+        drawAudioAnalyzerLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawVisualDelayTaps(context: &context, size: size, time: time, preset: preset)
         drawMinterLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawHolographicLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
@@ -561,6 +566,151 @@ struct RendererView: View {
         }
     }
 
+    private func drawAudioAnalyzerLayer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double) {
+        guard model.audioVisualizerMode != .off, model.audioVisualizerIntensity > 0.01 else { return }
+        let intensity = model.flashSafety ? min(model.audioVisualizerIntensity, 0.88) : model.audioVisualizerIntensity
+        switch model.audioVisualizerMode {
+        case .off:
+            return
+        case .spectrumTunnel:
+            drawSpectrumTunnel(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .oscilloscopeGarden:
+            drawOscilloscopeGarden(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .chromaVectorscope:
+            drawChromaVectorscope(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .spectralParticles:
+            drawSpectralParticles(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .hyperAnalyzer:
+            drawSpectrumTunnel(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.72)
+            drawOscilloscopeGarden(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.58, beat: beat)
+            drawChromaVectorscope(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.74)
+            drawSpectralParticles(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.62)
+        }
+    }
+
+    private func drawSpectrumTunnel(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double) {
+        let center = CGPoint(x: size.width * (0.5 + model.audioMeter.stereoBalance * 0.06), y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let bins = 28 + Int(model.audioVisualizerDetail * 44)
+        let bassKick = model.audioMeter.bass + model.audioMeter.transient * 0.55
+        let baseRadius = shortest * (0.08 + bassKick * 0.08)
+        let spin = time * (0.08 + model.audioMeter.spectralCentroid * 0.22)
+
+        for bin in 0..<bins {
+            let amount = Double(bin) / Double(bins)
+            let value = spectrumBin(bin, count: bins, time: time)
+            let angle = amount * Double.pi * 2.0 + spin
+            let inner = baseRadius + shortest * 0.025 * sin(time * 1.7 + amount * 18.0)
+            let outer = inner + shortest * (0.08 + value * (0.22 + model.audioVisualizerDetail * 0.18))
+            let start = CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner)
+            let end = CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer)
+            var bar = Path()
+            bar.move(to: start)
+            bar.addLine(to: end)
+            context.stroke(
+                bar,
+                with: .color(blendedColor(preset: preset, t: amount + model.audioMeter.spectralCentroid * 0.35 + time * 0.015).opacity((0.08 + value * 0.34) * intensity)),
+                lineWidth: 1.0 + value * (5.0 + intensity * 6.0)
+            )
+        }
+
+        let rings = 5 + Int(model.audioVisualizerPersistence * 7)
+        for ring in 0..<rings {
+            let phase = (Double(ring) / Double(max(1, rings)) + time * (0.04 + model.audioMeter.spectralFlux * 0.08)).truncatingRemainder(dividingBy: 1)
+            let radius = shortest * (0.10 + phase * (0.34 + model.audioMeter.bass * 0.16))
+            let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+            context.stroke(
+                Path(ellipseIn: rect),
+                with: .color(blendedColor(preset: preset, t: phase + 0.2).opacity((1.0 - phase) * intensity * (0.09 + model.audioMeter.transient * 0.20))),
+                lineWidth: 0.8 + model.audioMeter.bass * 5.0
+            )
+        }
+    }
+
+    private func drawOscilloscopeGarden(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let lanes = 5 + Int(model.audioVisualizerDetail * 5)
+        let bass = model.audioMeter.bass
+        let mid = model.audioMeter.mid
+        let treble = model.audioMeter.treble
+        let points = 160
+
+        for lane in 0..<lanes {
+            let laneT = Double(lane) / Double(max(1, lanes - 1))
+            let baseline = size.height * (0.16 + laneT * 0.68)
+            let amp = size.height * (0.025 + intensity * 0.055 + bass * 0.055 + treble * 0.030)
+            var ribbon = Path()
+            for point in 0...points {
+                let u = Double(point) / Double(points)
+                let carrier = sin(u * Double.pi * (4.0 + laneT * 12.0 + model.audioVisualizerDetail * 8.0) + time * (1.0 + laneT + mid * 4.0))
+                let fold = sin(u * Double.pi * (13.0 + model.audioMeter.spectralCentroid * 18.0) - time * (0.7 + treble * 5.0))
+                let beatBend = sin(beat * Double.pi * 2.0 + laneT * 4.0) * bass
+                let x = u * size.width
+                let y = baseline + (carrier * 0.72 + fold * 0.28 + beatBend * 0.32) * amp
+                if point == 0 { ribbon.move(to: CGPoint(x: x, y: y)) } else { ribbon.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(
+                ribbon,
+                with: .color(blendedColor(preset: preset, t: laneT + time * 0.03).opacity(0.08 + intensity * (0.10 + mid * 0.18))),
+                lineWidth: 0.8 + intensity * 2.2 + treble * 2.5
+            )
+        }
+    }
+
+    private func drawChromaVectorscope(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = min(size.width, size.height) * (0.16 + model.audioMeter.mid * 0.16 + model.macroY * 0.12)
+        let loops = 2 + Int(model.audioVisualizerDetail * 5)
+        let points = 360
+        let balance = model.audioMeter.stereoBalance
+        let centroid = model.audioMeter.spectralCentroid
+
+        for loop in 0..<loops {
+            let loopT = Double(loop) / Double(max(1, loops))
+            var path = Path()
+            let ax = 2.0 + Double(loop % 3) + model.audioMeter.bass * 4.0
+            let ay = 3.0 + Double((loop + 1) % 4) + model.audioMeter.treble * 5.0
+            let phase = time * (0.18 + centroid * 0.8) + loopT * Double.pi + balance * 0.7
+            for index in 0...points {
+                let u = Double(index) / Double(points) * Double.pi * 2.0
+                let x = sin(ax * u + phase) + sin((ax + ay) * 0.5 * u - time * 0.35) * 0.26
+                let y = sin(ay * u - phase * 1.2) + cos((ay + 1.0) * u + time * 0.22) * 0.20
+                let point = CGPoint(
+                    x: center.x + x * radius * (0.72 + loopT * 0.28) + balance * size.width * 0.06,
+                    y: center.y + y * radius * (0.55 + loopT * 0.22)
+                )
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            context.stroke(
+                path,
+                with: .color(blendedColor(preset: preset, t: loopT + centroid + time * 0.02).opacity(intensity * (0.10 + model.audioMeter.spectralFlux * 0.22))),
+                lineWidth: 0.7 + intensity * 2.2 + model.audioMeter.transient * 2.8
+            )
+        }
+    }
+
+    private func drawSpectralParticles(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double) {
+        let count = 70 + Int(model.audioVisualizerDetail * 130)
+        let bass = model.audioMeter.bass
+        let mid = model.audioMeter.mid
+        let treble = model.audioMeter.treble
+        let flux = model.audioMeter.spectralFlux
+
+        for index in 0..<count {
+            let seed = Double((index * 37 + model.sceneSeed * 13) % 997) / 997.0
+            let lane = Double((index * 71 + model.sceneSeed * 5) % 991) / 991.0
+            let orbit = 0.08 + pow(seed, 0.65) * 0.62 + bass * 0.10
+            let angle = time * (0.06 + lane * 0.18 + flux * 0.42) + seed * Double.pi * 8.0 + mid * 0.8
+            let x = size.width * (0.5 + cos(angle) * orbit * (0.58 + model.macroX * 0.35))
+            let y = size.height * (0.5 + sin(angle * (0.7 + lane * 0.6)) * orbit * (0.42 + model.macroY * 0.30))
+            let diameter = 1.4 + treble * 7.0 + flux * 6.0 + (index % 5 == 0 ? bass * 8.0 : 0)
+            let alpha = intensity * (0.035 + spectrumBin(index, count: count, time: time) * 0.20)
+            context.fill(
+                Path(ellipseIn: CGRect(x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter)),
+                with: .color(blendedColor(preset: preset, t: seed + time * 0.015 + model.audioMeter.spectralCentroid).opacity(alpha))
+            )
+        }
+    }
+
     private func drawVisualDelayTaps(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset) {
         let settings = model.delaySettings
         guard settings.enabled, settings.visualDelayEnabled else { return }
@@ -622,6 +772,20 @@ struct RendererView: View {
         if model.sequencer.lead.steps[step] { energy += 0.18 }
         energy += Double(model.liveNotes.count) * 0.08
         return min(1.0, energy)
+    }
+
+    private func spectrumBin(_ index: Int, count: Int, time: TimeInterval) -> Double {
+        let position = Double(index) / Double(max(1, count - 1))
+        let bassWeight = exp(-pow((position - 0.12) / 0.18, 2.0))
+        let midWeight = exp(-pow((position - 0.48) / 0.24, 2.0))
+        let trebleWeight = exp(-pow((position - 0.82) / 0.18, 2.0))
+        let shimmer = 0.5 + 0.5 * sin(time * (1.7 + position * 4.0) + Double(index * 11 + model.sceneSeed) * 0.17)
+        let value = model.audioMeter.bass * bassWeight
+            + model.audioMeter.mid * midWeight
+            + model.audioMeter.treble * trebleWeight
+            + model.audioMeter.spectralFlux * shimmer * 0.38
+            + model.audioMeter.transient * (index % 7 == 0 ? 0.32 : 0.0)
+        return min(1.0, max(0.0, value))
     }
 
     private func swungStepPosition(time: Double, secondsPerStep: Double, swing: Double) -> Double {
@@ -1780,20 +1944,52 @@ struct RendererView: View {
 
     private func blendedColor(preset: VisualPreset, t: Double) -> Color {
         let phase = t.truncatingRemainder(dividingBy: 1)
+        let baseColor: Color
         switch model.paletteMode {
         case .colourspace:
-            return Color.hsba(phase + model.macroX * 0.18, 0.95, 1.0)
+            baseColor = Color.hsba(phase + model.macroX * 0.18, 0.95, 1.0)
         case .yakNeon:
-            return Color.hsba(0.74 + phase * 0.34, 1.0, 1.0)
+            baseColor = Color.hsba(0.74 + phase * 0.34, 1.0, 1.0)
         case .phosphor:
-            return phase < 0.5 ? Color(red: 0.45, green: 1.0, blue: 0.28) : Color(red: 0.05, green: 0.82, blue: 0.64)
+            baseColor = phase < 0.5 ? Color(red: 0.45, green: 1.0, blue: 0.28) : Color(red: 0.05, green: 0.82, blue: 0.64)
         case .laserium:
-            return Color.hsba(0.52 + phase * 0.42, 0.86, 1.0)
+            baseColor = Color.hsba(0.52 + phase * 0.42, 0.86, 1.0)
         case .neon, .acid, .ultraviolet, .infrared, .ice, .monochrome, .rainbow, .amber:
-            break
+            if phase < 0.33 {
+                baseColor = preset.colorA
+            } else if phase < 0.66 {
+                baseColor = preset.colorB
+            } else {
+                baseColor = preset.colorC
+            }
         }
-        if phase < 0.33 { return preset.colorA }
-        if phase < 0.66 { return preset.colorB }
-        return preset.colorC
+        return gradeColor(baseColor)
+    }
+
+    private func gradeColor(_ color: Color) -> Color {
+        guard let rgb = NSColor(color).usingColorSpace(.extendedSRGB) else { return color }
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        rgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+
+        let gain = max(0.25, model.visualOutputGain)
+        let softClip = min(0.98, max(0.45, model.visualSoftClip))
+
+        func tone(_ value: CGFloat) -> Double {
+            let gained = Double(value) * gain
+            guard gained > softClip else { return gained }
+            let headroom = max(0.000_1, 1.0 - softClip)
+            let overshoot = gained - softClip
+            return softClip + (1.0 - exp(-overshoot / headroom)) * headroom
+        }
+
+        return Color(
+            red: tone(red),
+            green: tone(green),
+            blue: tone(blue),
+            opacity: Double(alpha)
+        )
     }
 }

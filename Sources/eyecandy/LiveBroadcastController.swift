@@ -97,12 +97,13 @@ final class LiveBroadcastController {
 
     private func liveFFmpegArguments(settings: BroadcastSettings, width: Int, height: Int, redacted: Bool) -> [String] {
         let fps = max(24, min(60, settings.frameRate))
-        let bitrate = max(1000, min(20_000, settings.bitrateKbps))
+        let bitrate = facebookCompatibleBitrate(settings)
         let gop = fps * 2
+        let profile = settings.target == .facebook && settings.facebookCompatibilityMode ? "main" : "high"
         var arguments = [
             "ffmpeg",
             "-hide_banner",
-            "-loglevel", "warning",
+            "-loglevel", "info",
             "-f", "rawvideo",
             "-pix_fmt", "bgra",
             "-s", "\(width)x\(height)",
@@ -118,18 +119,35 @@ final class LiveBroadcastController {
             "-tune", "zerolatency",
             "-r", "\(fps)",
             "-g", "\(gop)",
+            "-keyint_min", "\(gop)",
+            "-sc_threshold", "0",
+            "-profile:v", profile,
+            "-level", "4.0",
             "-b:v", "\(bitrate)k",
             "-maxrate", "\(bitrate)k",
             "-bufsize", "\(bitrate * 2)k",
             "-pix_fmt", "yuv420p",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-colorspace", "bt709",
             "-c:a", "aac",
+            "-profile:a", "aac_low",
             "-b:a", settings.target.recommendedAudioBitrate,
             "-ar", "\(settings.target.recommendedAudioSampleRate)",
             "-ac", "2",
+            "-flvflags", "no_duration_filesize",
             "-f", "flv",
             fullTargetURL(settings: settings, redacted: redacted)
         ])
         return arguments
+    }
+
+    private func facebookCompatibleBitrate(_ settings: BroadcastSettings) -> Int {
+        let bitrate = max(1000, min(20_000, settings.bitrateKbps))
+        guard settings.target == .facebook, settings.facebookCompatibilityMode else {
+            return bitrate
+        }
+        return max(2500, min(6000, bitrate))
     }
 
     private func attachErrorMonitoring(pipe: Pipe, statusHandler: @escaping @Sendable (String) -> Void) {
@@ -144,6 +162,14 @@ final class LiveBroadcastController {
                     return lower.contains("audio")
                         || lower.contains("avfoundation")
                         || lower.contains("aac")
+                        || lower.contains("rtmp")
+                        || lower.contains("rtmps")
+                        || lower.contains("tls")
+                        || lower.contains("handshake")
+                        || lower.contains("server returned")
+                        || lower.contains("connection")
+                        || lower.contains("permission")
+                        || lower.contains("authentication")
                         || lower.contains("error")
                         || lower.contains("failed")
                         || lower.contains("invalid")
@@ -157,8 +183,17 @@ final class LiveBroadcastController {
     }
 
     private func fullTargetURL(settings: BroadcastSettings, redacted: Bool) -> String {
-        let base = settings.ingestURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        var base = settings.ingestURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = redacted ? "STREAM_KEY" : settings.streamKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.target == .facebook && settings.facebookCompatibilityMode {
+            base = base.replacingOccurrences(of: "rtmp://", with: "rtmps://")
+            if !base.contains(":443/") {
+                base = base.replacingOccurrences(of: "live-api-s.facebook.com/rtmp", with: "live-api-s.facebook.com:443/rtmp")
+            }
+        }
+        if key.hasPrefix("rtmp://") || key.hasPrefix("rtmps://") {
+            return key
+        }
         if base.hasSuffix("/") {
             return base + key
         }
