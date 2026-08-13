@@ -649,11 +649,28 @@ enum GrooveTemplate: String, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
 }
 
+enum CompositionStyle: String, CaseIterable, Identifiable, Hashable {
+    case acidLab = "Acid Lab"
+    case berlinSchool = "Berlin School"
+    case psychedelicTrance = "Psychedelic Trance"
+    case dubMutation = "Dub Mutation"
+    case kosmischeAmbient = "Kosmische Ambient"
+    case electroBreaks = "Electro Breaks"
+    case generativeRaga = "Generative Raga"
+
+    var id: String { rawValue }
+}
+
 enum SequencerScale: String, CaseIterable, Identifiable, Hashable {
     case chromatic = "Chromatic"
     case minorPentatonic = "Minor Pentatonic"
     case dorian = "Dorian"
     case phrygian = "Phrygian"
+    case harmonicMinor = "Harmonic Minor"
+    case lydian = "Lydian"
+    case hirajoshi = "Hirajoshi"
+    case pelog = "Pelog"
+    case octatonic = "Octatonic"
     case wholeTone = "Whole Tone"
 
     var id: String { rawValue }
@@ -668,6 +685,16 @@ enum SequencerScale: String, CaseIterable, Identifiable, Hashable {
             return [0, 2, 3, 5, 7, 9, 10]
         case .phrygian:
             return [0, 1, 3, 5, 7, 8, 10]
+        case .harmonicMinor:
+            return [0, 2, 3, 5, 7, 8, 11]
+        case .lydian:
+            return [0, 2, 4, 6, 7, 9, 11]
+        case .hirajoshi:
+            return [0, 2, 3, 7, 8]
+        case .pelog:
+            return [0, 1, 3, 7, 8]
+        case .octatonic:
+            return [0, 2, 3, 5, 6, 8, 9, 11]
         case .wholeTone:
             return [0, 2, 4, 6, 8, 10]
         }
@@ -716,6 +743,9 @@ struct SequencerState: Hashable {
     var groove: GrooveTemplate = .straight
     var humanize = 0.0
     var mutationAmount = 0.20
+    var compositionStyle: CompositionStyle = .psychedelicTrance
+    var generativeDensity = 0.62
+    var phraseVariation = 0.38
     var scale: SequencerScale = .minorPentatonic
     var rootNote = 0
     var patternLength = 16

@@ -250,6 +250,9 @@ struct ContentView: View {
 
                 Menu {
                     optionButtons(TempoMode.allCases, selection: tempoModeBinding)
+                    Menu("Composition") {
+                        optionButtons(CompositionStyle.allCases, selection: $model.sequencer.compositionStyle)
+                    }
                     Menu("Groove") {
                         optionButtons(GrooveTemplate.allCases, selection: $model.sequencer.groove)
                     }
@@ -269,6 +272,9 @@ struct ContentView: View {
                     }
                     Divider()
                     Toggle("Play Sequencer", isOn: $model.sequencer.isPlaying)
+                    Button("Generate Composition") { model.generateComposition() }
+                    Button("Euclidean Drums") { model.generateEuclideanDrums() }
+                    Button("Counter Melody") { model.generateCounterMelody() }
                     Button("Randomize Pattern") { model.randomizePattern() }
                     Button("Mutate Pattern") { model.mutatePattern() }
                     Button("Humanize Pattern") { model.humanizePattern() }
@@ -548,9 +554,38 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                Picker("Root", selection: $model.sequencer.rootNote) {
+                    ForEach(0..<12, id: \.self) { root in
+                        Text(pitchClassName(root)).tag(root)
+                    }
+                }
+                .pickerStyle(.menu)
+                Picker("Composition", selection: $model.sequencer.compositionStyle) {
+                    ForEach(CompositionStyle.allCases) { style in
+                        Text(style.rawValue).tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+                Slider(value: $model.sequencer.generativeDensity, in: 0.05...1) { Text("Generator density") }
+                Slider(value: $model.sequencer.phraseVariation, in: 0...1) { Text("Phrase variation") }
                 Slider(value: $model.sequencer.humanize, in: 0...1) { Text("Humanize") }
                 Slider(value: $model.sequencer.mutationAmount, in: 0...1) { Text("Mutation") }
                 Stepper("Pattern length \(model.sequencer.patternLength)", value: $model.sequencer.patternLength, in: 4...16)
+                HStack {
+                    Button("Generate Composition") { model.generateComposition() }
+                    Button("Euclidean Drums") { model.generateEuclideanDrums() }
+                }
+                HStack {
+                    Button("Counter Melody") { model.generateCounterMelody() }
+                    Button("Capture Keys") { model.captureLiveKeysToLead() }
+                }
+                HStack {
+                    Button("Rotate L") { model.rotatePattern(-1) }
+                    Button("Rotate R") { model.rotatePattern(1) }
+                    Button("Mirror") { model.mirrorPattern() }
+                    Button("Invert") { model.invertMelodies() }
+                }
+                .controlSize(.small)
                 laneEditor(title: "Bass", lane: $model.sequencer.bass)
                 laneEditor(title: "Lead", lane: $model.sequencer.lead)
                 laneEditor(title: "Kick", lane: $model.sequencer.kick)
@@ -1304,6 +1339,11 @@ struct ContentView: View {
             Slider(value: voice.grainDensity, in: 0...1) { Text("Grain density") }
             Slider(value: voice.bitcrush, in: 0...1) { Text("Bitcrush") }
         }
+    }
+
+    private func pitchClassName(_ pitchClass: Int) -> String {
+        let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        return names[((pitchClass % 12) + 12) % 12]
     }
 
     private func noteName(_ midi: Int) -> String {

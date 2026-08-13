@@ -380,6 +380,189 @@ final class AppModel: ObservableObject {
         pushAudioState()
     }
 
+    func generateComposition() {
+        let style = sequencer.compositionStyle
+        let density = min(1.0, max(0.05, sequencer.generativeDensity))
+        let variation = min(1.0, max(0.0, sequencer.phraseVariation))
+        let seed = Int(Date().timeIntervalSinceReferenceDate * 1_000)
+        let bassMotif: [Int]
+        let leadMotif: [Int]
+        let bassPulses: Int
+        let leadPulses: Int
+
+        switch style {
+        case .acidLab:
+            sequencer.bpm = 132 + Double(Int.random(in: -6...10))
+            sequencer.scale = .phrygian
+            sequencer.groove = .mpcShuffle
+            sequencer.swing = 0.08 + variation * 0.10
+            sequencer.patternLength = 16
+            bassMotif = [0, 0, 3, 5, 7, 10, 7, 3]
+            leadMotif = [12, 15, 19, 22, 24, 22, 19, 15]
+            bassPulses = 6 + Int(density * 5)
+            leadPulses = 4 + Int(density * 6)
+        case .berlinSchool:
+            sequencer.bpm = 96 + Double(Int.random(in: -8...14))
+            sequencer.scale = .dorian
+            sequencer.groove = .straight
+            sequencer.swing = 0.02 + variation * 0.05
+            sequencer.patternLength = 16
+            bassMotif = [0, 7, 12, 10, 15, 12, 7, 5]
+            leadMotif = [12, 19, 24, 26, 31, 29, 24, 19]
+            bassPulses = 8 + Int(density * 4)
+            leadPulses = 5 + Int(density * 4)
+        case .psychedelicTrance:
+            sequencer.bpm = 142 + Double(Int.random(in: -6...8))
+            sequencer.scale = .harmonicMinor
+            sequencer.groove = .electroPush
+            sequencer.swing = 0.03 + variation * 0.04
+            sequencer.patternLength = 16
+            bassMotif = [0, 0, 7, 0, 3, 0, 8, 7]
+            leadMotif = [12, 15, 19, 24, 27, 31, 27, 24]
+            bassPulses = 10 + Int(density * 4)
+            leadPulses = 6 + Int(density * 5)
+        case .dubMutation:
+            sequencer.bpm = 78 + Double(Int.random(in: -5...12))
+            sequencer.scale = .minorPentatonic
+            sequencer.groove = .dillaDrift
+            sequencer.swing = 0.16 + variation * 0.14
+            sequencer.patternLength = 16
+            bassMotif = [0, 0, -5, 0, 3, 5, 0, -7]
+            leadMotif = [12, 10, 7, 15, 12, 19, 15, 10]
+            bassPulses = 3 + Int(density * 5)
+            leadPulses = 2 + Int(density * 5)
+        case .kosmischeAmbient:
+            sequencer.bpm = 62 + Double(Int.random(in: -8...16))
+            sequencer.scale = [.lydian, .hirajoshi, .wholeTone].randomElement()!
+            sequencer.groove = .straight
+            sequencer.swing = variation * 0.04
+            sequencer.patternLength = 13
+            bassMotif = [0, 7, 12, 19, 12, 7, 5]
+            leadMotif = [12, 19, 24, 31, 36, 31, 24, 19]
+            bassPulses = 3 + Int(density * 3)
+            leadPulses = 2 + Int(density * 4)
+        case .electroBreaks:
+            sequencer.bpm = 118 + Double(Int.random(in: -8...10))
+            sequencer.scale = .octatonic
+            sequencer.groove = .brokenBeat
+            sequencer.swing = 0.06 + variation * 0.12
+            sequencer.patternLength = 16
+            bassMotif = [0, 3, 0, 7, 10, 7, 3, -2]
+            leadMotif = [12, 15, 18, 22, 27, 25, 22, 18]
+            bassPulses = 5 + Int(density * 6)
+            leadPulses = 4 + Int(density * 7)
+        case .generativeRaga:
+            sequencer.bpm = 108 + Double(Int.random(in: -10...18))
+            sequencer.scale = [.hirajoshi, .pelog, .phrygian].randomElement()!
+            sequencer.groove = .garageSkip
+            sequencer.swing = 0.10 + variation * 0.12
+            sequencer.patternLength = 15
+            bassMotif = [0, 5, 7, 3, 8, 7, 5, 1]
+            leadMotif = [12, 13, 15, 20, 24, 25, 27, 32]
+            bassPulses = 4 + Int(density * 5)
+            leadPulses = 5 + Int(density * 7)
+        }
+
+        configureVoices(for: style)
+        let length = sequencer.patternLength
+        let scale = sequencer.scale
+        let root = sequencer.rootNote
+        writeMelodicLane(&sequencer.bass, motif: bassMotif, pulses: bassPulses, baseOctave: 0, seed: seed, density: density, variation: variation, forceDownbeats: true, patternLength: length, scale: scale, root: root)
+        writeMelodicLane(&sequencer.lead, motif: leadMotif, pulses: leadPulses, baseOctave: 1, seed: seed / 3, density: density, variation: variation, forceDownbeats: false, patternLength: length, scale: scale, root: root)
+        programEuclideanDrums(style: style, density: density, variation: variation)
+        syncDelayForComposition(style: style, density: density)
+        normalizeSequencerLanes()
+        status = "Generated \(style.rawValue) composition"
+        pushAudioState()
+    }
+
+    func generateEuclideanDrums() {
+        programEuclideanDrums(style: sequencer.compositionStyle, density: sequencer.generativeDensity, variation: sequencer.phraseVariation)
+        normalizeSequencerLanes()
+        status = "Generated Euclidean drums"
+        pushAudioState()
+    }
+
+    func generateCounterMelody() {
+        let chordJumps = [12, 19, 24, 17, 15, 22]
+        let length = max(1, min(sequencer.patternLength, sequencer.lead.steps.count))
+        for step in sequencer.lead.steps.indices {
+            let source = (step + length / 2) % length
+            let active = step < length && !sequencer.bass.steps[source] && (step % 2 == 1 || step % 4 == 2)
+            sequencer.lead.steps[step] = active
+            let bassNote = sequencer.bass.notes[source]
+            let jump = chordJumps[(step + source) % chordJumps.count]
+            sequencer.lead.notes[step] = nearestScaleOffset(bassNote + jump, scale: sequencer.scale, root: sequencer.rootNote)
+            sequencer.lead.velocities[step] = active ? min(1.0, 0.48 + sequencer.phraseVariation * 0.36 + Double(step % 4 == 1 ? 0.18 : 0.0)) : 0.36
+            sequencer.lead.probabilities[step] = active ? min(1.0, 0.58 + sequencer.generativeDensity * 0.34) : 0.25
+            sequencer.lead.ratchets[step] = active && step % 8 == 7 ? [2, 3].randomElement()! : 1
+        }
+        leadVoice.enabled = true
+        leadVoice.instrument = [.syncLead, .wavetableMorph, .ringModKeys, .phaseDistortion, .karplusPluck].randomElement()!
+        normalizeSequencerLanes()
+        status = "Generated counter melody"
+        pushAudioState()
+    }
+
+    func captureLiveKeysToLead() {
+        let captured = liveNotes.sorted()
+        guard !captured.isEmpty else {
+            status = "Hold live keyboard notes before capture"
+            return
+        }
+
+        let baseNote = 60 + leadVoice.octave * 12
+        let offsets = captured.map { $0 - baseNote }
+        let length = max(1, min(sequencer.patternLength, sequencer.lead.steps.count))
+        for step in sequencer.lead.steps.indices {
+            let active = step < length && (step % 2 == 0 || (sequencer.phraseVariation > 0.55 && step % 4 == 3))
+            sequencer.lead.steps[step] = active
+            sequencer.lead.notes[step] = offsets[(step / 2) % offsets.count]
+            sequencer.lead.velocities[step] = active ? 0.64 + Double(step % 4 == 0 ? 0.20 : 0.0) : 0.35
+            sequencer.lead.probabilities[step] = active ? 0.78 + sequencer.generativeDensity * 0.20 : 0.20
+            sequencer.lead.ratchets[step] = active && step % 8 == 6 ? 2 : 1
+        }
+        leadVoice.enabled = true
+        status = "Captured \(captured.count) live key\(captured.count == 1 ? "" : "s") to lead"
+        normalizeSequencerLanes()
+        pushAudioState()
+    }
+
+    func rotatePattern(_ amount: Int) {
+        rotateLane(&sequencer.bass, by: amount)
+        rotateLane(&sequencer.lead, by: amount)
+        rotateLane(&sequencer.kick, by: amount)
+        rotateLane(&sequencer.snare, by: amount)
+        rotateLane(&sequencer.hat, by: amount)
+        rotateLane(&sequencer.clap, by: amount)
+        status = amount > 0 ? "Rotated pattern right" : "Rotated pattern left"
+        normalizeSequencerLanes()
+        pushAudioState()
+    }
+
+    func mirrorPattern() {
+        let length = sequencer.patternLength
+        mirrorLane(&sequencer.bass, patternLength: length)
+        mirrorLane(&sequencer.lead, patternLength: length)
+        mirrorLane(&sequencer.kick, patternLength: length)
+        mirrorLane(&sequencer.snare, patternLength: length)
+        mirrorLane(&sequencer.hat, patternLength: length)
+        mirrorLane(&sequencer.clap, patternLength: length)
+        status = "Mirrored pattern loop"
+        normalizeSequencerLanes()
+        pushAudioState()
+    }
+
+    func invertMelodies() {
+        let scale = sequencer.scale
+        let root = sequencer.rootNote
+        invertMelodyLane(&sequencer.bass, scale: scale, root: root)
+        invertMelodyLane(&sequencer.lead, scale: scale, root: root)
+        status = "Inverted bass and lead melodies"
+        normalizeSequencerLanes()
+        pushAudioState()
+    }
+
     func tapTempo() {
         tempoMode = .manual
         let now = Date().timeIntervalSinceReferenceDate
@@ -474,6 +657,204 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func configureVoices(for style: CompositionStyle) {
+        switch style {
+        case .acidLab:
+            bassVoice = SynthVoice(instrument: .acidSaw, enabled: true, level: 0.55, octave: 1, cutoff: 0.62, resonance: 0.58, glide: 0.22, accent: 0.82, attack: 0.01, decay: 0.38, sustain: 0.08, drive: 0.58, filterEnvelope: 0.78, lfoRate: 0.22, lfoAmount: 0.22, morph: 0.34, unison: 0.12, detune: 0.07, subLevel: 0.38, noiseLevel: 0.04, fmAmount: 0.18, wavefold: 0.24, grainSize: 0.16, grainDensity: 0.24, bitcrush: 0.03)
+            leadVoice = SynthVoice(instrument: .syncLead, enabled: true, level: 0.34, octave: 3, cutoff: 0.74, resonance: 0.32, glide: 0.05, accent: 0.46, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.34, filterEnvelope: 0.46, lfoRate: 0.36, lfoAmount: 0.30, morph: 0.56, unison: 0.38, detune: 0.22, subLevel: 0.04, noiseLevel: 0.03, fmAmount: 0.28, wavefold: 0.22, grainSize: 0.18, grainDensity: 0.32, bitcrush: 0.07)
+        case .berlinSchool:
+            bassVoice = SynthVoice(instrument: .subSquare, enabled: true, level: 0.48, octave: 1, cutoff: 0.48, resonance: 0.24, glide: 0.18, accent: 0.38, attack: 0.02, decay: 0.62, sustain: 0.34, drive: 0.22, filterEnvelope: 0.28, lfoRate: 0.12, lfoAmount: 0.16, morph: 0.26, unison: 0.10, detune: 0.06, subLevel: 0.58, noiseLevel: 0.02, fmAmount: 0.08, wavefold: 0.08, grainSize: 0.20, grainDensity: 0.28, bitcrush: 0.0)
+            leadVoice = SynthVoice(instrument: .wavetableMorph, enabled: true, level: 0.38, octave: 3, cutoff: 0.70, resonance: 0.18, glide: 0.08, accent: 0.28, attack: 0.04, decay: 0.72, sustain: 0.44, drive: 0.18, filterEnvelope: 0.28, lfoRate: 0.18, lfoAmount: 0.30, morph: 0.70, unison: 0.28, detune: 0.18, subLevel: 0.04, noiseLevel: 0.03, fmAmount: 0.30, wavefold: 0.08, grainSize: 0.30, grainDensity: 0.42, bitcrush: 0.01)
+        case .psychedelicTrance:
+            bassVoice = SynthVoice(instrument: .reeseBass, enabled: true, level: 0.52, octave: 1, cutoff: 0.42, resonance: 0.30, glide: 0.06, accent: 0.64, attack: 0.01, decay: 0.30, sustain: 0.08, drive: 0.48, filterEnvelope: 0.52, lfoRate: 0.28, lfoAmount: 0.22, morph: 0.46, unison: 0.58, detune: 0.34, subLevel: 0.54, noiseLevel: 0.02, fmAmount: 0.14, wavefold: 0.20, grainSize: 0.12, grainDensity: 0.22, bitcrush: 0.02)
+            leadVoice = SynthVoice(instrument: .superSaw, enabled: true, level: 0.34, octave: 3, cutoff: 0.80, resonance: 0.20, glide: 0.03, accent: 0.48, attack: 0.01, decay: 0.42, sustain: 0.18, drive: 0.26, filterEnvelope: 0.42, lfoRate: 0.44, lfoAmount: 0.28, morph: 0.62, unison: 0.72, detune: 0.42, subLevel: 0.02, noiseLevel: 0.02, fmAmount: 0.22, wavefold: 0.16, grainSize: 0.16, grainDensity: 0.30, bitcrush: 0.03)
+        case .dubMutation:
+            bassVoice = SynthVoice(instrument: .subSquare, enabled: true, level: 0.58, octave: 1, cutoff: 0.36, resonance: 0.20, glide: 0.24, accent: 0.46, attack: 0.02, decay: 0.72, sustain: 0.42, drive: 0.34, filterEnvelope: 0.24, lfoRate: 0.10, lfoAmount: 0.26, morph: 0.22, unison: 0.08, detune: 0.04, subLevel: 0.72, noiseLevel: 0.03, fmAmount: 0.06, wavefold: 0.06, grainSize: 0.24, grainDensity: 0.20, bitcrush: 0.0)
+            leadVoice = SynthVoice(instrument: .ringModKeys, enabled: true, level: 0.28, octave: 3, cutoff: 0.58, resonance: 0.34, glide: 0.10, accent: 0.22, attack: 0.05, decay: 0.70, sustain: 0.34, drive: 0.18, filterEnvelope: 0.22, lfoRate: 0.20, lfoAmount: 0.34, morph: 0.50, unison: 0.16, detune: 0.12, subLevel: 0.02, noiseLevel: 0.04, fmAmount: 0.72, wavefold: 0.10, grainSize: 0.18, grainDensity: 0.28, bitcrush: 0.05)
+        case .kosmischeAmbient:
+            bassVoice = SynthVoice(instrument: .spectralDrone, enabled: true, level: 0.36, octave: 1, cutoff: 0.44, resonance: 0.34, glide: 0.42, accent: 0.18, attack: 0.28, decay: 0.92, sustain: 0.78, drive: 0.12, filterEnvelope: 0.16, lfoRate: 0.14, lfoAmount: 0.54, morph: 0.80, unison: 0.46, detune: 0.28, subLevel: 0.18, noiseLevel: 0.14, fmAmount: 0.24, wavefold: 0.06, grainSize: 0.62, grainDensity: 0.44, bitcrush: 0.01)
+            leadVoice = SynthVoice(instrument: .granularCloud, enabled: true, level: 0.30, octave: 3, cutoff: 0.72, resonance: 0.16, glide: 0.20, accent: 0.14, attack: 0.22, decay: 0.90, sustain: 0.68, drive: 0.12, filterEnvelope: 0.16, lfoRate: 0.18, lfoAmount: 0.48, morph: 0.78, unison: 0.32, detune: 0.20, subLevel: 0.04, noiseLevel: 0.20, fmAmount: 0.30, wavefold: 0.05, grainSize: 0.78, grainDensity: 0.86, bitcrush: 0.02)
+        case .electroBreaks:
+            bassVoice = SynthVoice(instrument: .phaseDistortion, enabled: true, level: 0.50, octave: 1, cutoff: 0.54, resonance: 0.36, glide: 0.10, accent: 0.54, attack: 0.01, decay: 0.44, sustain: 0.16, drive: 0.42, filterEnvelope: 0.50, lfoRate: 0.30, lfoAmount: 0.24, morph: 0.66, unison: 0.22, detune: 0.16, subLevel: 0.32, noiseLevel: 0.04, fmAmount: 0.58, wavefold: 0.34, grainSize: 0.18, grainDensity: 0.30, bitcrush: 0.16)
+            leadVoice = SynthVoice(instrument: .bitcrushLead, enabled: true, level: 0.34, octave: 3, cutoff: 0.64, resonance: 0.42, glide: 0.06, accent: 0.62, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.42, filterEnvelope: 0.50, lfoRate: 0.48, lfoAmount: 0.34, morph: 0.54, unison: 0.28, detune: 0.18, subLevel: 0.06, noiseLevel: 0.08, fmAmount: 0.46, wavefold: 0.26, grainSize: 0.16, grainDensity: 0.34, bitcrush: 0.56)
+        case .generativeRaga:
+            bassVoice = SynthVoice(instrument: .karplusPluck, enabled: true, level: 0.42, octave: 1, cutoff: 0.70, resonance: 0.22, glide: 0.08, accent: 0.58, attack: 0.00, decay: 0.32, sustain: 0.08, drive: 0.26, filterEnvelope: 0.52, lfoRate: 0.18, lfoAmount: 0.12, morph: 0.32, unison: 0.08, detune: 0.05, subLevel: 0.18, noiseLevel: 0.18, fmAmount: 0.16, wavefold: 0.12, grainSize: 0.14, grainDensity: 0.24, bitcrush: 0.0)
+            leadVoice = SynthVoice(instrument: .formantVox, enabled: true, level: 0.34, octave: 3, cutoff: 0.74, resonance: 0.52, glide: 0.12, accent: 0.30, attack: 0.08, decay: 0.70, sustain: 0.46, drive: 0.18, filterEnvelope: 0.30, lfoRate: 0.20, lfoAmount: 0.24, morph: 0.66, unison: 0.22, detune: 0.15, subLevel: 0.02, noiseLevel: 0.05, fmAmount: 0.30, wavefold: 0.08, grainSize: 0.34, grainDensity: 0.40, bitcrush: 0.02)
+        }
+    }
+
+    private func writeMelodicLane(_ lane: inout StepLane, motif: [Int], pulses: Int, baseOctave: Int, seed: Int, density: Double, variation: Double, forceDownbeats: Bool, patternLength: Int, scale: SequencerScale, root: Int) {
+        let length = max(1, min(patternLength, lane.steps.count))
+        let mask = euclideanPattern(pulses: min(length, max(1, pulses)), steps: lane.steps.count, rotation: seed % max(1, length))
+        for step in lane.steps.indices {
+            let inLoop = step < length
+            let downbeat = forceDownbeats && step % 4 == 0
+            let ghost = Double.random(in: 0...1) < variation * 0.18 && step < length
+            lane.steps[step] = inLoop && (mask[step] || downbeat || ghost)
+            let motifIndex = abs(step + seed) % max(1, motif.count)
+            let mutation = Double.random(in: 0...1) < variation * 0.28 ? Int.random(in: -2...2) : 0
+            let octaveLift = step % 11 == 7 ? 1 : 0
+            lane.notes[step] = scaleOffset(degree: motif[motifIndex] + mutation, octave: baseOctave + octaveLift, scale: scale, root: root)
+            lane.velocities[step] = lane.steps[step] ? min(1.0, 0.48 + density * 0.34 + Double(step % 4 == 0 ? 0.18 : 0.0)) : 0.32
+            lane.probabilities[step] = lane.steps[step] ? min(1.0, 0.58 + density * 0.34 + variation * 0.08) : max(0.10, variation * 0.28)
+            lane.ratchets[step] = lane.steps[step] && variation > 0.42 && [3, 7, 11, 15].contains(step) ? [1, 2, 3].randomElement()! : 1
+        }
+    }
+
+    private func programEuclideanDrums(style: CompositionStyle, density: Double, variation: Double) {
+        let density = min(1.0, max(0.05, density))
+        let variation = min(1.0, max(0.0, variation))
+        let kickPulses: Int
+        let snarePulses: Int
+        let hatPulses: Int
+        let clapPulses: Int
+        let snareRotation: Int
+
+        switch style {
+        case .acidLab:
+            kickPulses = 4 + Int(density * 2)
+            snarePulses = 2
+            hatPulses = 7 + Int(density * 6)
+            clapPulses = 2 + Int(variation * 2)
+            snareRotation = 4
+        case .berlinSchool:
+            kickPulses = 4
+            snarePulses = 1 + Int(density * 2)
+            hatPulses = 6 + Int(density * 5)
+            clapPulses = 1
+            snareRotation = 6
+        case .psychedelicTrance:
+            kickPulses = 4
+            snarePulses = 2
+            hatPulses = 10 + Int(density * 5)
+            clapPulses = 2
+            snareRotation = 4
+        case .dubMutation:
+            kickPulses = 3 + Int(density * 3)
+            snarePulses = 2
+            hatPulses = 4 + Int(density * 5)
+            clapPulses = 2 + Int(variation * 2)
+            snareRotation = 4
+        case .kosmischeAmbient:
+            kickPulses = 1 + Int(density * 2)
+            snarePulses = 1
+            hatPulses = 3 + Int(density * 4)
+            clapPulses = variation > 0.6 ? 1 : 0
+            snareRotation = 8
+        case .electroBreaks:
+            kickPulses = 5 + Int(density * 3)
+            snarePulses = 3 + Int(variation * 2)
+            hatPulses = 8 + Int(density * 5)
+            clapPulses = 2 + Int(variation * 3)
+            snareRotation = 3
+        case .generativeRaga:
+            kickPulses = 3 + Int(density * 3)
+            snarePulses = 1 + Int(variation * 2)
+            hatPulses = 5 + Int(density * 6)
+            clapPulses = 1 + Int(variation * 2)
+            snareRotation = 5
+        }
+
+        sequencer.kick.steps = euclideanPattern(pulses: kickPulses, steps: sequencer.kick.steps.count, rotation: 0)
+        sequencer.snare.steps = euclideanPattern(pulses: snarePulses, steps: sequencer.snare.steps.count, rotation: snareRotation)
+        sequencer.hat.steps = euclideanPattern(pulses: hatPulses, steps: sequencer.hat.steps.count, rotation: 2)
+        sequencer.clap.steps = euclideanPattern(pulses: clapPulses, steps: sequencer.clap.steps.count, rotation: 7)
+
+        for step in sequencer.kick.steps.indices {
+            sequencer.kick.velocities[step] = sequencer.kick.steps[step] ? (step % 4 == 0 ? 1.0 : 0.72 + density * 0.16) : 0.42
+            sequencer.kick.probabilities[step] = sequencer.kick.steps[step] ? 1.0 : 0.10
+            sequencer.kick.ratchets[step] = 1
+            sequencer.snare.velocities[step] = sequencer.snare.steps[step] ? 0.70 + variation * 0.22 : 0.38
+            sequencer.snare.probabilities[step] = sequencer.snare.steps[step] ? 0.82 + density * 0.16 : 0.12
+            sequencer.snare.ratchets[step] = sequencer.snare.steps[step] && variation > 0.62 && step % 8 == 7 ? 2 : 1
+            sequencer.hat.velocities[step] = sequencer.hat.steps[step] ? 0.42 + density * 0.36 + Double(step % 4 == 2 ? 0.12 : 0.0) : 0.26
+            sequencer.hat.probabilities[step] = sequencer.hat.steps[step] ? min(1.0, 0.58 + density * 0.32) : max(0.08, variation * 0.22)
+            sequencer.hat.ratchets[step] = sequencer.hat.steps[step] && variation > 0.34 && [6, 14, 15].contains(step) ? [2, 3, 4].randomElement()! : 1
+            sequencer.clap.velocities[step] = sequencer.clap.steps[step] ? 0.56 + variation * 0.24 : 0.28
+            sequencer.clap.probabilities[step] = sequencer.clap.steps[step] ? 0.62 + density * 0.24 : 0.08
+            sequencer.clap.ratchets[step] = sequencer.clap.steps[step] && variation > 0.72 ? 2 : 1
+        }
+    }
+
+    private func syncDelayForComposition(style: CompositionStyle, density: Double) {
+        let offsets: [Double]
+        switch style {
+        case .dubMutation:
+            offsets = [0.375, 0.75, 1.5, 2.25, 3.0, 4.0]
+            delaySettings.wet = 0.56
+            delaySettings.globalFeedback = 0.42
+        case .kosmischeAmbient:
+            offsets = [0.5, 1.0, 1.618, 2.618, 4.0, 6.0]
+            delaySettings.wet = 0.62
+            delaySettings.globalFeedback = 0.36
+        case .berlinSchool:
+            offsets = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+            delaySettings.wet = 0.42
+            delaySettings.globalFeedback = 0.30
+        case .acidLab, .psychedelicTrance, .electroBreaks, .generativeRaga:
+            offsets = [0.1875, 0.25, 0.375, 0.5, 0.75, 1.0]
+            delaySettings.wet = 0.32 + density * 0.18
+            delaySettings.globalFeedback = 0.22 + density * 0.16
+        }
+
+        delaySettings.enabled = true
+        for index in delaySettings.taps.indices {
+            delaySettings.taps[index].enabled = index < 4 || style == .kosmischeAmbient || style == .dubMutation
+            delaySettings.taps[index].beatOffset = offsets[index % offsets.count]
+            delaySettings.taps[index].level = max(0.10, 0.36 - Double(index) * 0.045)
+            delaySettings.taps[index].feedback = max(0.05, delaySettings.globalFeedback * (0.56 - Double(index) * 0.045))
+            delaySettings.taps[index].visualSpread = min(1.0, 0.12 + Double(index) * 0.13 + density * 0.12)
+        }
+    }
+
+    private func euclideanPattern(pulses: Int, steps: Int, rotation: Int) -> [Bool] {
+        guard steps > 0 else { return [] }
+        let pulses = min(steps, max(0, pulses))
+        guard pulses > 0 else { return Array(repeating: false, count: steps) }
+        guard pulses < steps else { return Array(repeating: true, count: steps) }
+        return (0..<steps).map { index in
+            let rotated = (index + rotation + steps * 8) % steps
+            return (rotated * pulses) % steps < pulses
+        }
+    }
+
+    private func rotateLane(_ lane: inout StepLane, by amount: Int) {
+        lane.steps = rotated(lane.steps, by: amount)
+        lane.notes = rotated(lane.notes, by: amount)
+        lane.velocities = rotated(lane.velocities, by: amount)
+        lane.probabilities = rotated(lane.probabilities, by: amount)
+        lane.ratchets = rotated(lane.ratchets, by: amount)
+    }
+
+    private func rotated<T>(_ values: [T], by amount: Int) -> [T] {
+        guard !values.isEmpty else { return values }
+        let shift = ((amount % values.count) + values.count) % values.count
+        guard shift != 0 else { return values }
+        return Array(values.suffix(shift)) + Array(values.prefix(values.count - shift))
+    }
+
+    private func mirrorLane(_ lane: inout StepLane, patternLength: Int) {
+        let length = max(1, min(patternLength, lane.steps.count))
+        let half = max(1, (length + 1) / 2)
+        for step in half..<length {
+            let source = max(0, length - 1 - step)
+            lane.steps[step] = lane.steps[source]
+            lane.notes[step] = lane.notes[source]
+            lane.velocities[step] = lane.velocities[source]
+            lane.probabilities[step] = lane.probabilities[source]
+            lane.ratchets[step] = lane.ratchets[source]
+        }
+    }
+
+    private func invertMelodyLane(_ lane: inout StepLane, scale: SequencerScale, root: Int) {
+        let activeNotes = lane.steps.indices.filter { lane.steps[$0] }.map { lane.notes[$0] }
+        let pivot = activeNotes.isEmpty ? root : Int(round(Double(activeNotes.reduce(0, +)) / Double(activeNotes.count)))
+        for index in lane.notes.indices {
+            let inverted = pivot - (lane.notes[index] - pivot)
+            lane.notes[index] = nearestScaleOffset(inverted, scale: scale, root: root)
+        }
+    }
+
     private func normalizeSequencerLanes() {
         sequencer.bass.normalize()
         sequencer.lead.normalize()
@@ -490,6 +871,15 @@ final class AppModel: ObservableObject {
         let normalizedDegree = ((degree % degrees.count) + degrees.count) % degrees.count
         let octaveCarry = Int(floor(Double(degree) / Double(degrees.count)))
         return sequencer.rootNote + degrees[normalizedDegree] + (octave + octaveCarry) * 12
+    }
+
+    private func nearestScaleOffset(_ offset: Int, scale: SequencerScale, root: Int) -> Int {
+        let degrees = scale.degrees
+        guard !degrees.isEmpty else { return offset }
+        let candidates = (-4...5).flatMap { octave in
+            degrees.map { root + $0 + octave * 12 }
+        }
+        return candidates.min { abs($0 - offset) < abs($1 - offset) } ?? offset
     }
 
     private func mutateLane(_ lane: inout StepLane, melodic: Bool, density: Double, amount: Double, scale: SequencerScale, root: Int) {

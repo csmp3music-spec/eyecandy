@@ -28,6 +28,7 @@ Current rebuilt features:
 - Beat-synced multitap delay FX with per-tap beat offset, level, feedback, and visual spread.
 - Golden Phi tempo mode: sets 161.8 BPM, phi-derived swing, a 13-step loop, and golden-ratio delay taps for audio/visual echoes.
 - Expanded sequencer and synths: groove templates, scale-aware acid/lead generators, mutation/humanize tools, lane probability, velocity, ratchets, per-lane lengths, audible clap sequencing, granular/wavetable/FM/ring/phase/reese/bitcrush instruments, and granular oscillator controls.
+- Advanced composition tools: style-based full composition generator, Euclidean drum generator, counter-melody builder, live-key capture into the lead lane, pattern rotation, mirroring, inversion, density/variation macros, and expanded scale modes.
 - Scrollable synth panel with quick voice presets and per-voice randomization for fast live sound design.
 - Music-reactive visual multitap delay: delayed audio taps create matching delayed visual ghost rings and rays in live view and MP4 export.
 - Expansive visual engine selector: Light Tunnel, Vector Field, Metaballs, Terrain Grid, Oscilloscope Ribbons, Fractal Lightning, Particle Nebula, Shape Constellation, Liquid Cells, and Engine Autopilot.
