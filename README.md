@@ -10,11 +10,12 @@ Current rebuilt features:
 - New default `Studio` dashboard that brings transport, quantized scene launch, live scene deck recall, bus mixer, and visual output safety into one performance view.
 - Inspector workflow improvements: quick panel jump buttons, compact live status strip, searchable visual presets, and an always-visible AppKit-backed vertical scrollbar for long control panels.
 - Audio-reactive analyzer visualizer modes: Spectrum Tunnel, Oscilloscope Garden, Chroma Vectorscope, Spectral Particles, and Hyper Analyzer.
+- Expanded analyzer modes: Feedback Waveform, Spectral Lattice, and Phase Bloom for MilkDrop-style wave/mesh/bloom responses.
 - Live analyzer metrics for bass, mid, high, transient/flux, spectral centroid, and stereo balance drive the visualizer layers instead of relying only on beat timing.
 - SwiftUI TimelineView/Canvas renderer with beat-reactive symmetry, tunnels, rings, demoscene scan lines, and modulation.
 - Jeff Minter-inspired neon grid, orbiting light-synth, and arcade vortex overlays.
 - Modernized Minter core modes inspired by Psychedelia, Colourspace, VLM/Neon, Tempest/TxK-style vector webs, Space Giraffe, Polybius tunnels, Gridrunner lattices, Neon Loopz, and LlamaTron trails.
-- Holographic scan-volume, chroma-depth, and interference overlays.
+- Holographic scan-volume, chroma-depth, interference, Pepper Ghost stage, light-field volume, CGH speckle, and realistic-stack overlays.
 - 80s/90s demoscene overlays: Amiga copper bars, VGA plasma, rotozoomer, vector balls, star tunnel, sine scroller, chunky VGA, and Mega Demo mode.
 - Advanced light-synth panel with XY macro pad, photon director, flash safety, prism splits, phosphor persistence, and Trip Max/Safe Cruise performance buttons.
 - Experimental video modes: Colourspace, Neon Pulse, slit-scan, feedback ghosts, chromatic aberration, datamosh blocks, VHS melt, pixel-sort trails, codec tearing, RGB delay, halftone posterization, optical-flow smear, recursive mirror feedback, liquid lens, kaleido feedback, solarized contours, phosphor burn, tunnel fold, chroma light leaks, and stacked demoscene processing.
@@ -39,7 +40,7 @@ Current rebuilt features:
 - AVAudioEngine procedural synth output with stereo master drive, width control, safety limiter, and live peak/gain-reduction meters.
 - Production-style bus mixer for bass, lead, drums, live keys, and FX return with per-bus level, pan, send, mute, and solo controls.
 - Visual output mastering controls for lower default brightness, plus live `Visual Gain` and `Visual Soft Clip` controls to keep neon palettes vivid without blowing out the frame.
-- Expanded synth instruments: Acid Saw, Sub Square, Super Saw, FM Bell, Glass Pad, Noise Organ, Sync Lead, and Formant Vox.
+- Expanded synth instruments: Acid Saw, Sub Square, Super Saw, FM Bell, Glass Pad, Noise Organ, Sync Lead, Formant Vox, Buchla Complex, Mellotron Tape, Solina Stringer, Synclavier Digital, and Vector Morph.
 - 16-step bass, lead, kick, snare, hat, and clap pattern editing.
 - Analog bass and lead voice controls.
 - Drum preset library.
@@ -54,6 +55,7 @@ Current rebuilt features:
 - Facebook Live safe setup: RTMPS port 443, 720p30, H.264 Main profile, 2-second keyframes, AAC-LC stereo, yuv420p/BT.709, stream URL normalization, and expanded ffmpeg connection diagnostics.
 - Broadcast stereo desktop-mix audio through a named AVFoundation audio device such as `BlackHole 2ch`, with silent fallback, Facebook-safe AAC settings, and ffmpeg error reporting in app status.
 - Camera input overlay for optical video feedback with selectable AVFoundation camera source, refresh, mirror, luma/chroma, and depth controls.
+- Procedural video feedback simulator with Optical Tunnel, Prism Hall, Luma Bloom Memory, Chroma Warp Field, Scanline Memory, Mirror Labyrinth, and Feedback Lab modes, including decay, zoom, twist, displacement, prism split, and audio-reactive controls in live view and MP4 export.
 
 Run locally:
 

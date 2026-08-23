@@ -46,6 +46,10 @@ enum HolographicMode: String, CaseIterable, Identifiable {
     case scanVolume = "Scan Volume"
     case chromaDepth = "Chroma Depth"
     case interference = "Interference"
+    case pepperGhost = "Pepper Ghost Stage"
+    case lightField = "Light Field Volume"
+    case cghSpeckle = "CGH Speckle"
+    case realisticStack = "Realistic Stack"
 
     var id: String { rawValue }
 }
@@ -109,6 +113,9 @@ enum AudioVisualizerMode: String, CaseIterable, Identifiable {
     case oscilloscopeGarden = "Oscilloscope Garden"
     case chromaVectorscope = "Chroma Vectorscope"
     case spectralParticles = "Spectral Particles"
+    case feedbackWaveform = "Feedback Waveform"
+    case spectralLattice = "Spectral Lattice"
+    case phaseBloom = "Phase Bloom"
     case hyperAnalyzer = "Hyper Analyzer"
 
     var id: String { rawValue }
@@ -250,6 +257,19 @@ enum CameraFeedbackMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum FeedbackSimulatorMode: String, CaseIterable, Identifiable, Hashable {
+    case off = "Off"
+    case opticalTunnel = "Optical Tunnel"
+    case prismHall = "Prism Hall"
+    case lumaBloomMemory = "Luma Bloom Memory"
+    case chromaWarpField = "Chroma Warp Field"
+    case scanlineMemory = "Scanline Memory"
+    case mirrorLabyrinth = "Mirror Labyrinth"
+    case feedbackLab = "Feedback Lab"
+
+    var id: String { rawValue }
+}
+
 enum SceneLaunchQuantization: String, CaseIterable, Identifiable {
     case immediate = "Immediate"
     case nextBeat = "Next Beat"
@@ -355,6 +375,14 @@ struct LightSceneSnapshot: Identifiable, Hashable {
     var videoEdgeGain: Double
     var videoColorWarp: Double
     var videoOscillatorRate: Double
+    var feedbackSimulatorMode: FeedbackSimulatorMode
+    var feedbackSimulatorIntensity: Double
+    var feedbackSimulatorDecay: Double
+    var feedbackSimulatorZoom: Double
+    var feedbackSimulatorTwist: Double
+    var feedbackSimulatorDisplacement: Double
+    var feedbackSimulatorPrism: Double
+    var feedbackSimulatorAudioReactive: Bool
     var cameraFeedbackMode: CameraFeedbackMode
     var cameraOverlayOpacity: Double
     var cameraFeedbackAmount: Double
@@ -634,6 +662,11 @@ enum SynthInstrument: String, CaseIterable, Identifiable, Hashable {
     case karplusPluck = "Karplus Pluck"
     case bitcrushLead = "Bitcrush Lead"
     case spectralDrone = "Spectral Drone"
+    case buchlaComplex = "Buchla Complex"
+    case mellotronTape = "Mellotron Tape"
+    case solinaStringer = "Solina Stringer"
+    case synclavierDigital = "Synclavier Digital"
+    case vectorMorph = "Vector Morph"
 
     var id: String { rawValue }
 }

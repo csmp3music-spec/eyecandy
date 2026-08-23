@@ -30,6 +30,14 @@ struct MP4RecordingRequest {
     var videoEdgeGain: Double
     var videoColorWarp: Double
     var videoOscillatorRate: Double
+    var feedbackSimulatorMode: FeedbackSimulatorMode
+    var feedbackSimulatorIntensity: Double
+    var feedbackSimulatorDecay: Double
+    var feedbackSimulatorZoom: Double
+    var feedbackSimulatorTwist: Double
+    var feedbackSimulatorDisplacement: Double
+    var feedbackSimulatorPrism: Double
+    var feedbackSimulatorAudioReactive: Bool
     var cameraInputEnabled: Bool
     var cameraOverlayOpacity: Double
     var cameraFeedbackAmount: Double
@@ -83,6 +91,14 @@ extension MP4RecordingRequest {
         videoEdgeGain: 0.46,
         videoColorWarp: 0.58,
         videoOscillatorRate: 0.50,
+        feedbackSimulatorMode: .feedbackLab,
+        feedbackSimulatorIntensity: 0.52,
+        feedbackSimulatorDecay: 0.68,
+        feedbackSimulatorZoom: 0.46,
+        feedbackSimulatorTwist: 0.22,
+        feedbackSimulatorDisplacement: 0.54,
+        feedbackSimulatorPrism: 0.42,
+        feedbackSimulatorAudioReactive: true,
         cameraInputEnabled: false,
         cameraOverlayOpacity: 0.38,
         cameraFeedbackAmount: 0.46,
@@ -248,6 +264,7 @@ enum MP4Recorder {
         drawHolographicLayer(context, size: size, request: request, time: t, beat: beat)
         drawPaletteAndGate(context, size: size, request: request, time: t)
         drawExperimentalVideoMode(context, size: size, request: request, time: t, beat: beat)
+        drawFeedbackSimulatorLayer(context, size: size, request: request, time: t, beat: beat)
         drawCameraFeedbackOverlay(context, size: size, request: request, time: t)
     }
 
@@ -1352,6 +1369,226 @@ enum MP4Recorder {
         }
     }
 
+    private static func drawFeedbackSimulatorLayer(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double) {
+        guard request.feedbackSimulatorMode != .off, request.feedbackSimulatorIntensity > 0.01 else { return }
+        let intensity = request.flashSafety ? min(request.feedbackSimulatorIntensity, 0.84) : request.feedbackSimulatorIntensity
+        let energy = request.feedbackSimulatorAudioReactive ? musicEnergy(at: time, sequencer: request.sequencer) : 0.42
+        context.setBlendMode(.screen)
+
+        switch request.feedbackSimulatorMode {
+        case .off:
+            return
+        case .opticalTunnel:
+            drawFeedbackOpticalTunnel(context, size: size, request: request, time: time, beat: beat, intensity: intensity, energy: energy)
+        case .prismHall:
+            drawFeedbackPrismHall(context, size: size, request: request, time: time, intensity: intensity, energy: energy)
+        case .lumaBloomMemory:
+            drawFeedbackLumaBloomMemory(context, size: size, request: request, time: time, beat: beat, intensity: intensity, energy: energy)
+        case .chromaWarpField:
+            drawFeedbackChromaWarpField(context, size: size, request: request, time: time, intensity: intensity, energy: energy)
+        case .scanlineMemory:
+            drawFeedbackScanlineMemory(context, size: size, request: request, time: time, intensity: intensity, energy: energy)
+        case .mirrorLabyrinth:
+            drawFeedbackMirrorLabyrinth(context, size: size, request: request, time: time, beat: beat, intensity: intensity, energy: energy)
+        case .feedbackLab:
+            drawFeedbackOpticalTunnel(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.72, energy: energy)
+            drawFeedbackPrismHall(context, size: size, request: request, time: time, intensity: intensity * 0.62, energy: energy)
+            drawFeedbackLumaBloomMemory(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.58, energy: energy)
+            drawFeedbackChromaWarpField(context, size: size, request: request, time: time, intensity: intensity * 0.54, energy: energy)
+            drawFeedbackScanlineMemory(context, size: size, request: request, time: time, intensity: intensity * 0.48, energy: energy)
+            drawFeedbackMirrorLabyrinth(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.50, energy: energy)
+        }
+    }
+
+    private static func drawFeedbackOpticalTunnel(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width * (0.5 + (request.macroX - 0.5) * 0.28), y: size.height * (0.5 + (0.5 - request.macroY) * 0.22))
+        let shortest = min(size.width, size.height)
+        let echoes = 10 + Int(request.feedbackSimulatorDecay * 22)
+        let zoom = 0.018 + request.feedbackSimulatorZoom * 0.060
+        for echo in 0..<echoes {
+            let t = Double(echo) / Double(max(1, echoes - 1))
+            let falloff = pow(1.0 - t, 0.9 + (1.0 - request.feedbackSimulatorDecay) * 1.6)
+            let inset = shortest * t * zoom * (1.0 + energy * 0.38)
+            let wobble = sin(time * (0.55 + request.videoOscillatorRate * 1.4) + t * 12.0) * shortest * 0.018 * request.feedbackSimulatorDisplacement
+            let rect = CGRect(x: inset + wobble, y: inset - wobble * 0.7, width: size.width - inset * 2, height: size.height - inset * 2)
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: CGFloat((t - 0.5) * request.feedbackSimulatorTwist * .pi * 0.38 + sin(beat * .pi * 2.0 + t * 5.0) * 0.018 * energy))
+            context.translateBy(x: -center.x, y: -center.y)
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: t + time * 0.025, alpha: falloff * intensity * 0.16))
+            context.setLineWidth(0.8 + falloff * (2.2 + energy * 4.0))
+            context.stroke(rect)
+            if echo % 3 == 0 {
+                let ring = inset * (1.4 + request.feedbackSimulatorZoom)
+                context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: t + 0.45, alpha: falloff * intensity * 0.07))
+                context.setLineWidth(0.7 + energy * 2.0)
+                context.strokeEllipse(in: CGRect(x: center.x - ring, y: center.y - ring * 0.56, width: ring * 2, height: ring * 1.12))
+            }
+            context.restoreGState()
+        }
+    }
+
+    private static func drawFeedbackPrismHall(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let echoes = 7 + Int(request.feedbackSimulatorPrism * 13)
+        let channels: [(CGColor, Double, Double)] = [
+            (CGColor(red: 1, green: 0, blue: 0.18, alpha: 1), 0.0, 1.0),
+            (CGColor(red: 0.1, green: 1, blue: 0.2, alpha: 1), 0.33, -0.6),
+            (CGColor(red: 0.0, green: 0.82, blue: 1.0, alpha: 1), 0.66, 0.8)
+        ]
+        for echo in 0..<echoes {
+            let t = Double(echo) / Double(max(1, echoes - 1))
+            let radius = shortest * (0.08 + t * (0.55 + request.feedbackSimulatorZoom * 0.24))
+            let sides = 3 + Int(request.feedbackSimulatorPrism * 7)
+            for (color, hueOffset, direction) in channels {
+                let split = shortest * request.feedbackSimulatorPrism * 0.020 * direction * (1.0 + t * 3.0)
+                let rotation = time * (0.04 + request.feedbackSimulatorTwist * 0.20) * direction + t * .pi * 0.7
+                let path = CGMutablePath()
+                for side in 0...sides {
+                    let u = Double(side) / Double(sides) * .pi * 2.0 + rotation
+                    let refract = sin(u * 2.0 + time * 1.7 + energy * 3.0) * request.feedbackSimulatorDisplacement * shortest * 0.018
+                    let p = CGPoint(x: center.x + cos(u) * (radius + refract) + split, y: center.y + sin(u) * (radius * 0.72 - refract * 0.4))
+                    if side == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                let alpha = pow(1.0 - t, 1.2) * intensity * (0.08 + request.feedbackSimulatorPrism * 0.11)
+                context.setStrokeColor(color.copy(alpha: alpha) ?? color)
+                context.setLineWidth(0.7 + energy * 2.0)
+                context.addPath(path)
+                context.strokePath()
+                if echo % 2 == 0 {
+                    context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: hueOffset + t + time * 0.02, alpha: alpha * 0.55))
+                    context.setLineWidth(1.6 + request.feedbackSimulatorPrism * 2.0)
+                    context.addPath(path)
+                    context.strokePath()
+                }
+            }
+        }
+    }
+
+    private static func drawFeedbackLumaBloomMemory(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double, energy: Double) {
+        let cells = 18 + Int(request.feedbackSimulatorDisplacement * 26)
+        let cellW = size.width / Double(cells)
+        let cellH = size.height / Double(cells)
+        let threshold = request.videoKeyThreshold * 0.72
+        for y in 0..<cells {
+            for x in 0..<cells {
+                let nx = Double(x) / Double(cells) - 0.5
+                let ny = Double(y) / Double(cells) - 0.5
+                let luma = 0.50
+                    + sin(nx * 13.0 + time * (0.8 + request.videoOscillatorRate * 2.6)) * 0.22
+                    + cos(ny * 11.0 - time * 1.2) * 0.20
+                    + sin((nx * nx + ny * ny) * 38.0 - beat * .pi * 2.0) * 0.18
+                    + energy * 0.18
+                guard luma > threshold else { continue }
+                let key = min(1.0, (luma - threshold) / max(0.08, 1.0 - threshold))
+                let memory = pow(key, 0.7 + (1.0 - request.feedbackSimulatorDecay) * 1.8)
+                let bloom = min(cellW, cellH) * (0.12 + memory * (0.42 + request.feedbackSimulatorZoom * 0.38))
+                let cx = Double(x) * cellW + cellW * 0.5 + sin(time + ny * 8.0) * cellW * request.feedbackSimulatorDisplacement * 0.45
+                let cy = Double(y) * cellH + cellH * 0.5 + cos(time * 0.8 + nx * 8.0) * cellH * request.feedbackSimulatorDisplacement * 0.45
+                context.setFillColor(paletteColor(request.paletteMode, preset: request.preset, time: luma + time * 0.026, alpha: memory * intensity * 0.14))
+                context.fillEllipse(in: CGRect(x: cx - bloom, y: cy - bloom, width: bloom * 2, height: bloom * 2))
+            }
+        }
+    }
+
+    private static func drawFeedbackChromaWarpField(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, intensity: Double, energy: Double) {
+        let rows = 14 + Int(request.feedbackSimulatorDisplacement * 20)
+        let cols = 18 + Int(request.feedbackSimulatorDisplacement * 28)
+        let amp = min(size.width, size.height) * (0.014 + request.feedbackSimulatorDisplacement * 0.055) * (0.7 + energy)
+        for row in 0...rows {
+            let ny = Double(row) / Double(max(1, rows))
+            let path = CGMutablePath()
+            for col in 0...cols {
+                let nx = Double(col) / Double(max(1, cols))
+                let field = feedbackNoise(nx * 3.2 + request.macroX, ny * 2.8 + request.macroY, time * (0.18 + request.videoOscillatorRate * 0.4))
+                let twist = sin((nx - 0.5) * (ny - 0.5) * 26.0 + time * (0.7 + request.feedbackSimulatorTwist)) * amp * request.feedbackSimulatorTwist
+                let x = nx * size.width + field * amp + twist
+                let y = ny * size.height + sin(field * .pi + time + nx * 7.0) * amp * 0.55
+                if col == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: ny + time * 0.018, alpha: 0.035 + intensity * 0.095))
+            context.setLineWidth(0.7 + energy * 2.0)
+            context.addPath(path)
+            context.strokePath()
+        }
+        for col in 0...cols where col % 2 == 0 {
+            let nx = Double(col) / Double(max(1, cols))
+            let path = CGMutablePath()
+            for row in 0...rows {
+                let ny = Double(row) / Double(max(1, rows))
+                let field = feedbackNoise(nx * 2.8 - request.macroY, ny * 3.3 + request.macroX, time * (0.16 + request.videoOscillatorRate * 0.36) + 2.1)
+                let x = nx * size.width + cos(field * .pi * 2.0 + time) * amp * 0.65
+                let y = ny * size.height + field * amp
+                if row == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: nx + 0.5, alpha: 0.020 + intensity * 0.065))
+            context.setLineWidth(0.6 + request.feedbackSimulatorPrism * 1.6)
+            context.addPath(path)
+            context.strokePath()
+        }
+    }
+
+    private static func drawFeedbackScanlineMemory(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, intensity: Double, energy: Double) {
+        let spacing = 3.0 + (1.0 - request.feedbackSimulatorDecay) * 9.0
+        let driftScale = size.width * (0.012 + request.feedbackSimulatorDisplacement * 0.10)
+        var rowIndex = 0
+        for row in stride(from: 0.0, to: size.height, by: spacing) {
+            let t = row / max(1.0, size.height)
+            let decay = pow(1.0 - t * 0.32, 1.0 + (1.0 - request.feedbackSimulatorDecay) * 2.0)
+            let drift = sin(row * 0.030 + time * (1.2 + request.videoOscillatorRate * 3.0)) * driftScale
+                + sin(time * 0.7 + Double(rowIndex) * 0.43) * driftScale * 0.35 * energy
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: t + time * 0.018, alpha: decay * (0.020 + intensity * 0.065)))
+            context.setLineWidth(0.7 + energy * 1.8)
+            context.move(to: CGPoint(x: drift, y: row))
+            context.addLine(to: CGPoint(x: size.width + drift, y: row + sin(time + t * 10.0) * request.feedbackSimulatorTwist * 8.0))
+            context.strokePath()
+            if rowIndex % 11 == 0 {
+                context.setFillColor(CGColor(red: 0.16, green: 1.0, blue: 0.28, alpha: decay * intensity * 0.025))
+                context.fill(CGRect(x: drift * 0.35, y: row, width: size.width, height: max(1.0, spacing * (1.0 + request.feedbackSimulatorZoom * 2.0))))
+            }
+            rowIndex += 1
+        }
+    }
+
+    private static func drawFeedbackMirrorLabyrinth(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let symmetry = 5 + Int(request.feedbackSimulatorPrism * 11)
+        let depth = 8 + Int(request.feedbackSimulatorDecay * 16)
+        for ring in 0..<depth {
+            let t = Double(ring) / Double(max(1, depth - 1))
+            let radius = shortest * (0.06 + t * (0.54 + request.feedbackSimulatorZoom * 0.18))
+            let alpha = pow(1.0 - t, 1.15) * intensity * (0.055 + energy * 0.060)
+            for segment in 0..<symmetry {
+                let a = Double(segment) / Double(symmetry) * .pi * 2.0 + time * (0.025 + request.feedbackSimulatorTwist * 0.16) + t * 0.9
+                let b = a + .pi * 2.0 / Double(symmetry) * (0.44 + sin(beat * .pi * 2.0 + t * 5.0) * 0.08)
+                let fold = 0.72 + abs(sin(a * 2.0 + time)) * 0.36
+                let shard = CGMutablePath()
+                shard.move(to: center)
+                shard.addLine(to: CGPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius * fold))
+                shard.addLine(to: CGPoint(x: center.x + cos(b) * radius * (1.0 + request.feedbackSimulatorDisplacement * 0.18), y: center.y + sin(b) * radius * fold))
+                shard.closeSubpath()
+                context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: t + Double(segment) * 0.05 + time * 0.02, alpha: alpha))
+                context.setLineWidth(0.7 + request.feedbackSimulatorPrism * 2.2)
+                context.addPath(shard)
+                context.strokePath()
+                if segment % 2 == 0 {
+                    context.setFillColor(paletteColor(request.paletteMode, preset: request.preset, time: 1.0 - t + Double(segment) * 0.03, alpha: alpha * 0.24))
+                    context.addPath(shard)
+                    context.fillPath()
+                }
+            }
+        }
+    }
+
+    private static func feedbackNoise(_ x: Double, _ y: Double, _ z: Double) -> Double {
+        let a = sin(x * 5.13 + z * 1.70) * 0.50
+        let b = cos(y * 6.71 - z * 1.31) * 0.32
+        let c = sin((x + y) * 9.23 + sin(z * 0.7) * 2.0) * 0.18
+        return a + b + c
+    }
+
     private static func drawCameraFeedbackOverlay(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double) {
         guard request.cameraInputEnabled, let image = request.cameraImage else { return }
 
@@ -1916,17 +2153,18 @@ enum MP4Recorder {
 
     private static func drawHolographicLayer(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double) {
         guard request.holographicMode != .off || request.preset.family == .holographic else { return }
+        let mode: HolographicMode = request.holographicMode == .off ? .ghostPrism : request.holographicMode
         let depth = request.hologramDepth
         context.setBlendMode(.screen)
 
-        let scanLines = 56
+        let scanLines = mode == .realisticStack ? 72 : 56
         for line in 0..<scanLines {
             let y = size.height * Double(line) / Double(scanLines)
-            let alpha = 0.025 + depth * 0.05 + sin(time * 6.0 + Double(line)) * 0.012
+            let alpha = 0.018 + depth * 0.05 + sin(time * 6.0 + Double(line)) * 0.010
             context.setStrokeColor(CGColor(red: 0.35, green: 1.0, blue: 0.92, alpha: max(0.0, alpha)))
-            context.setLineWidth(1.0)
+            context.setLineWidth(0.8)
             context.move(to: CGPoint(x: 0, y: y))
-            context.addLine(to: CGPoint(x: size.width, y: y + sin(time + Double(line)) * depth * 8.0))
+            context.addLine(to: CGPoint(x: size.width, y: y + sin(time + Double(line)) * depth * (mode == .realisticStack ? 12.0 : 8.0)))
             context.strokePath()
         }
 
@@ -1940,7 +2178,19 @@ enum MP4Recorder {
             context.strokeEllipse(in: rect)
         }
 
-        if request.holographicMode == .chromaDepth || request.holographicMode == .interference {
+        if mode == .pepperGhost || mode == .realisticStack {
+            drawPepperGhostStage(context, size: size, request: request, time: time, beat: beat, depth: depth)
+        }
+
+        if mode == .lightField || mode == .realisticStack {
+            drawLightFieldVolume(context, size: size, request: request, time: time, beat: beat, depth: depth)
+        }
+
+        if mode == .cghSpeckle || mode == .realisticStack || mode == .interference {
+            drawCGHSpeckle(context, size: size, request: request, time: time, depth: depth)
+        }
+
+        if mode == .chromaDepth || mode == .interference || mode == .realisticStack {
             context.setBlendMode(.plusLighter)
             for band in 0..<18 {
                 let y = size.height * Double(band) / 18.0
@@ -1954,6 +2204,172 @@ enum MP4Recorder {
                 context.addLine(to: CGPoint(x: size.width - offset, y: y - 14))
                 context.strokePath()
             }
+        }
+    }
+
+    private static func drawPepperGhostStage(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, depth: Double) {
+        context.setBlendMode(.screen)
+        let shortest = min(size.width, size.height)
+        let topInset = max(20, size.width * (0.22 - depth * 0.04))
+        let bottomInset = max(12, size.width * (0.10 - depth * 0.025))
+        let topY = size.height * 0.18
+        let bottomY = size.height * 0.84
+
+        let plane = CGMutablePath()
+        plane.move(to: CGPoint(x: topInset, y: topY))
+        plane.addLine(to: CGPoint(x: size.width - topInset, y: topY + shortest * 0.035))
+        plane.addLine(to: CGPoint(x: size.width - bottomInset, y: bottomY))
+        plane.addLine(to: CGPoint(x: bottomInset, y: bottomY - shortest * 0.045))
+        plane.closeSubpath()
+        context.addPath(plane)
+        context.setFillColor(CGColor(red: 0.10, green: 0.95, blue: 1.0, alpha: 0.018 + depth * 0.035))
+        context.fillPath()
+        context.addPath(plane)
+        context.setStrokeColor(CGColor(red: 0.64, green: 1.0, blue: 0.94, alpha: 0.10 + depth * 0.18))
+        context.setLineWidth(1.0 + depth * 2.2)
+        context.strokePath()
+
+        let center = CGPoint(x: size.width * (0.50 + sin(time * 0.19) * 0.035), y: size.height * (0.55 + cos(time * 0.13) * 0.03))
+        let layers = max(5, 5 + Int(depth * 4.0))
+        for echo in 0..<layers {
+            let t = Double(echo) / Double(max(1, layers - 1))
+            let lift = shortest * (0.18 + t * 0.12 + beat * 0.04)
+            let drift = sin(time * 0.6 + t * 4.7) * shortest * depth * (0.03 + t * 0.02)
+            let width = shortest * (0.20 + t * 0.06)
+            let height = shortest * (0.38 - t * 0.05)
+            let x = center.x + drift + (t - 0.5) * shortest * depth * 0.12
+            let y = center.y - lift * 0.35 + t * shortest * 0.05
+            let alpha = (1.0 - t * 0.72) * (0.070 + depth * 0.12)
+            let body = CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+
+            context.setStrokeColor(CGColor(red: 0.35, green: 1.0, blue: 0.88, alpha: alpha))
+            context.setLineWidth(0.9 + depth * 2.2)
+            context.strokeEllipse(in: body)
+            context.setStrokeColor(neonColor(Double((request.preset.id * 17) % 360) / 360.0 + t, alpha: alpha * 0.55))
+            context.setLineWidth(0.7 + depth * 1.4)
+            context.strokeEllipse(in: body.insetBy(dx: width * 0.18, dy: height * 0.20))
+
+            let spine = CGMutablePath()
+            spine.move(to: CGPoint(x: x, y: body.minY + height * 0.18))
+            spine.addCurve(
+                to: CGPoint(x: x + sin(time + t * 3.0) * width * 0.16, y: body.maxY - height * 0.16),
+                control1: CGPoint(x: x - width * 0.20, y: y - height * 0.10),
+                control2: CGPoint(x: x + width * 0.24, y: y + height * 0.20)
+            )
+            context.addPath(spine)
+            context.setStrokeColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * 0.62))
+            context.setLineWidth(0.55 + depth)
+            context.strokePath()
+        }
+
+        let shadow = CGRect(x: center.x - shortest * 0.24, y: size.height * 0.82, width: shortest * 0.48, height: shortest * 0.055)
+        context.setBlendMode(.multiply)
+        context.setFillColor(CGColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.18 + depth * 0.18))
+        context.fillEllipse(in: shadow)
+        context.setBlendMode(.plusLighter)
+
+        for glint in 0..<10 {
+            let t = Double(glint) / 9.0
+            let x = bottomInset + (size.width - bottomInset * 2.0) * t
+            let y = bottomY - shortest * 0.03 + sin(time * 1.4 + t * 8.0) * shortest * 0.012
+            context.setStrokeColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.035 + depth * 0.085))
+            context.setLineWidth(0.7 + depth * 1.2)
+            context.move(to: CGPoint(x: x, y: y))
+            context.addLine(to: CGPoint(x: x + shortest * (0.035 + depth * 0.05), y: y - shortest * (0.08 + depth * 0.04)))
+            context.strokePath()
+        }
+    }
+
+    private static func drawLightFieldVolume(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, depth: Double) {
+        context.setBlendMode(.screen)
+        let shortest = min(size.width, size.height)
+        let center = CGPoint(x: size.width * (0.50 + sin(time * 0.07) * 0.04), y: size.height * (0.50 + cos(time * 0.09) * 0.04))
+        let hueBase = Double((request.preset.id * 31) % 360) / 360.0
+        let slices = 22
+        for slice in 0..<slices {
+            let t = Double(slice) / Double(max(1, slices - 1))
+            let z = (t - 0.5) * 2.0
+            let parallax = z * shortest * depth * 0.18
+            let wobble = sin(time * 0.45 + t * 9.0)
+            let w = shortest * (0.18 + t * 0.42)
+            let h = shortest * (0.10 + t * 0.22)
+            let rect = CGRect(
+                x: center.x - w / 2 + parallax * 0.55 + wobble * depth * 18.0,
+                y: center.y - h / 2 + parallax * 0.18 + cos(time * 0.37 + t * 6.0) * depth * 16.0,
+                width: w,
+                height: h
+            )
+            let alpha = (1.0 - abs(z) * 0.58) * (0.020 + depth * 0.070)
+            context.setStrokeColor(neonColor(hueBase + t + time * 0.025, alpha: alpha))
+            context.setLineWidth(0.8 + depth * 1.8)
+            context.strokeEllipse(in: rect)
+
+            if slice % 2 == 0 {
+                context.setStrokeColor(CGColor(red: 0.35, green: 1.0, blue: 0.92, alpha: alpha * 0.85))
+                context.setLineWidth(0.5 + depth)
+                context.move(to: CGPoint(x: rect.minX, y: rect.midY))
+                context.addLine(to: CGPoint(x: rect.maxX, y: rect.midY + sin(time + t * 7.0) * h * 0.22))
+                context.strokePath()
+            }
+
+            for voxel in 0..<7 {
+                let seedA = Double((slice * 73 + voxel * 41 + request.sceneSeed * 17) % 997) / 997.0
+                let seedB = Double((slice * 29 + voxel * 67 + request.sceneSeed * 23) % 991) / 991.0
+                let angle = seedA * .pi * 2.0 + time * (0.18 + seedB * 0.22)
+                let radius = seedB * 0.48
+                let x = rect.midX + cos(angle) * rect.width * radius
+                let y = rect.midY + sin(angle * 1.7) * rect.height * radius
+                let d = shortest * (0.0035 + seedA * 0.0045) * (0.7 + depth)
+                context.setFillColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: alpha * (1.6 + seedB)))
+                context.fillEllipse(in: CGRect(x: x - d / 2, y: y - d / 2, width: d, height: d))
+            }
+        }
+
+        context.setBlendMode(.plusLighter)
+        for ray in 0..<28 {
+            let t = Double(ray) / 28.0
+            let angle = t * .pi * 2.0 + sin(time * 0.19) * 0.35
+            let inner = shortest * (0.08 + beat * 0.08)
+            let outer = shortest * (0.32 + depth * 0.28 + 0.05 * sin(time + t * 11.0))
+            context.setStrokeColor(neonColor(hueBase + 0.35 + t, alpha: 0.018 + depth * 0.045))
+            context.setLineWidth(0.6 + depth * 1.3)
+            context.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner * 0.58))
+            context.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer * 0.58))
+            context.strokePath()
+        }
+    }
+
+    private static func drawCGHSpeckle(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, depth: Double) {
+        context.setBlendMode(.plusLighter)
+        let grains = 150 + Int(depth * 180)
+        let hueBase = Double((request.preset.id * 43) % 360) / 360.0
+        for grain in 0..<grains {
+            let sx = Double((grain * 37 + request.sceneSeed * 11) % 997) / 997.0
+            let sy = Double((grain * 61 + request.sceneSeed * 19) % 991) / 991.0
+            let x = sx * size.width
+            let y = sy * size.height
+            let carrier = sin(x * 0.018 + y * 0.013 + time * 1.6 + Double(grain % 17))
+            let shimmer = 0.5 + 0.5 * sin(time * (0.68 + Double(grain % 13) * 0.033) + Double(grain) * 1.913)
+            let alpha = (0.010 + carrier * carrier * 0.034 + shimmer * 0.026) * depth
+            let diameter = 0.75 + sx * (1.7 + depth * 1.6)
+            context.setFillColor(grain % 5 == 0 ? neonColor(hueBase + sx + time * 0.01, alpha: alpha) : CGColor(red: 0.78, green: 1.0, blue: 0.96, alpha: alpha))
+            context.fillEllipse(in: CGRect(x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter))
+        }
+
+        let rows = 18
+        for row in 0..<rows {
+            let t = Double(row) / Double(rows)
+            let step = max(10.0, size.width / 96.0)
+            context.setStrokeColor(CGColor(red: 0.55, green: 1.0, blue: 0.92, alpha: 0.018 + depth * 0.052))
+            context.setLineWidth(0.55 + depth * 1.15)
+            context.beginPath()
+            context.move(to: CGPoint(x: 0, y: size.height * t))
+            for x in stride(from: 0.0, through: size.width, by: step) {
+                let phase = x * 0.018 + t * 19.0 + time * (0.55 + depth)
+                let y = size.height * t + sin(phase) * (8.0 + depth * 28.0) + cos(phase * 0.43) * depth * 18.0
+                context.addLine(to: CGPoint(x: x, y: y))
+            }
+            context.strokePath()
         }
     }
 

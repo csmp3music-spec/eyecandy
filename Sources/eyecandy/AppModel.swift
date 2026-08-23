@@ -44,6 +44,14 @@ final class AppModel: ObservableObject {
     @Published var videoEdgeGain = 0.46
     @Published var videoColorWarp = 0.58
     @Published var videoOscillatorRate = 0.50
+    @Published var feedbackSimulatorMode: FeedbackSimulatorMode = .feedbackLab
+    @Published var feedbackSimulatorIntensity = 0.52
+    @Published var feedbackSimulatorDecay = 0.68
+    @Published var feedbackSimulatorZoom = 0.46
+    @Published var feedbackSimulatorTwist = 0.22
+    @Published var feedbackSimulatorDisplacement = 0.54
+    @Published var feedbackSimulatorPrism = 0.42
+    @Published var feedbackSimulatorAudioReactive = true
     @Published var cameraInputEnabled = false
     @Published var cameraFeedbackMode: CameraFeedbackMode = .optical
     @Published var cameraOverlayOpacity = 0.38
@@ -197,6 +205,13 @@ final class AppModel: ObservableObject {
         videoEdgeGain = min(1.0, preset.intensity + 0.10)
         videoColorWarp = min(1.0, preset.intensity + 0.04)
         videoOscillatorRate = min(1.0, 0.22 + preset.intensity * 0.74)
+        feedbackSimulatorMode = feedbackSimulatorMode(for: preset.videoMode, seed: preset.name.count + preset.frameRate)
+        feedbackSimulatorIntensity = min(0.88, 0.24 + preset.intensity * 0.58)
+        feedbackSimulatorDecay = min(0.94, 0.34 + preset.intensity * 0.54)
+        feedbackSimulatorZoom = min(0.90, 0.20 + preset.intensity * 0.56)
+        feedbackSimulatorTwist = Double(((preset.name.count * 17) % 100)) / 100.0
+        feedbackSimulatorDisplacement = min(0.94, 0.24 + preset.intensity * 0.62)
+        feedbackSimulatorPrism = min(0.88, 0.18 + preset.intensity * 0.58)
         macroX = Double((preset.name.count * 37) % 100) / 100.0
         macroY = Double((preset.name.count * 71 + preset.frameRate) % 100) / 100.0
         prismSplits = 2 + ((preset.name.count + preset.frameRate) % 10)
@@ -204,7 +219,7 @@ final class AppModel: ObservableObject {
         exposure = min(0.95, 0.48 + preset.intensity * 0.30)
         visualOutputGain = min(0.92, 0.66 + preset.intensity * 0.18)
         visualSoftClip = max(0.62, 0.82 - preset.intensity * 0.12)
-        holographicMode = preset.videoMode == .clean ? .off : HolographicMode.allCases[(preset.name.count + preset.frameRate) % HolographicMode.allCases.count]
+        holographicMode = preset.videoMode == .clean ? .off : performanceHolographicMode(seed: preset.name.count + preset.frameRate, intensity: preset.intensity)
         cameraFeedbackMode = feedbackMode(for: preset.videoMode)
         cameraOverlayOpacity = min(0.72, 0.18 + preset.intensity * 0.42)
         cameraFeedbackAmount = min(1.0, 0.24 + preset.intensity * 0.66)
@@ -231,6 +246,34 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func feedbackSimulatorMode(for videoMode: ExperimentalVideoMode, seed: Int) -> FeedbackSimulatorMode {
+        switch videoMode {
+        case .videoFeedback, .recursiveMirror:
+            return .opticalTunnel
+        case .chromaticAberration, .rgbDelay, .chromaInvert, .chromaLightLeaks:
+            return .prismHall
+        case .lumaKeyBloom, .solarizedContours, .phosphorBurn:
+            return .lumaBloomMemory
+        case .liquidLens, .opticalFlowSmear, .datamoshBlocks, .codecTear, .pixelSortTrails:
+            return .chromaWarpField
+        case .slitScan, .scanGate, .vhsMelt, .halftonePosterize:
+            return .scanlineMemory
+        case .kaleidoFeedback, .tunnelFold, .demosceneStack, .vectorScope, .oscillatorBank:
+            return .mirrorLabyrinth
+        case .clean, .colourspace, .neonPulse, .edgeTrace:
+            let modes: [FeedbackSimulatorMode] = [.opticalTunnel, .prismHall, .lumaBloomMemory, .chromaWarpField, .scanlineMemory, .mirrorLabyrinth, .feedbackLab]
+            return modes[abs(seed) % modes.count]
+        }
+    }
+
+    private func performanceHolographicMode(seed: Int, intensity: Double) -> HolographicMode {
+        if intensity > 0.86 {
+            return .realisticStack
+        }
+        let modes: [HolographicMode] = [.ghostPrism, .scanVolume, .chromaDepth, .interference, .pepperGhost, .lightField, .cghSpeckle, .realisticStack]
+        return modes[abs(seed) % modes.count]
+    }
+
     func randomizeVisual() {
         if let preset = PresetLibrary.visualPresets.randomElement() {
             applyPreset(preset)
@@ -254,6 +297,13 @@ final class AppModel: ObservableObject {
         lightSynthIntensity = profile.intensity
         minterIntensity = activePreset.family == .minter ? profile.intensity : profile.intensity * 0.25
         prismSplits = profile.prismSplits
+        feedbackSimulatorMode = feedbackSimulatorMode(for: experimentalVideoMode, seed: seed + activePreset.id)
+        feedbackSimulatorIntensity = min(0.84, 0.22 + profile.intensity * 0.54)
+        feedbackSimulatorDecay = min(0.92, 0.38 + Double((seed * 13) % 55) / 100.0)
+        feedbackSimulatorZoom = min(0.88, 0.18 + Double((seed * 17) % 62) / 100.0)
+        feedbackSimulatorTwist = Double((seed * 19) % 100) / 100.0
+        feedbackSimulatorDisplacement = min(0.92, 0.20 + Double((seed * 23) % 70) / 100.0)
+        feedbackSimulatorPrism = min(0.88, 0.16 + Double((seed * 29) % 65) / 100.0)
         macroX = Double((seed * 37) % 100) / 100.0
         macroY = Double((seed * 71) % 100) / 100.0
         photonDirectorEnabled = false
@@ -322,7 +372,7 @@ final class AppModel: ObservableObject {
         sequencer.lead.velocities = sequencer.lead.velocities.indices.map { step in step % 4 == 1 ? 0.92 : Double.random(in: 0.42...0.78) }
         sequencer.lead.probabilities = sequencer.lead.probabilities.indices.map { step in [5, 9, 13].contains(step) ? 0.58 : 0.86 }
         sequencer.lead.ratchets = sequencer.lead.ratchets.indices.map { step in step % 8 == 7 ? 2 : 1 }
-        leadVoice.instrument = [.syncLead, .superSaw, .fmBell, .formantVox, .wavetableMorph, .phaseDistortion, .ringModKeys, .bitcrushLead, .granularCloud].randomElement()!
+        leadVoice.instrument = [.syncLead, .superSaw, .fmBell, .formantVox, .wavetableMorph, .phaseDistortion, .ringModKeys, .bitcrushLead, .granularCloud, .buchlaComplex, .synclavierDigital, .vectorMorph, .solinaStringer].randomElement()!
         leadVoice.cutoff = 0.70
         leadVoice.resonance = 0.22
         leadVoice.accent = 0.48
@@ -498,7 +548,7 @@ final class AppModel: ObservableObject {
             sequencer.lead.ratchets[step] = active && step % 8 == 7 ? [2, 3].randomElement()! : 1
         }
         leadVoice.enabled = true
-        leadVoice.instrument = [.syncLead, .wavetableMorph, .ringModKeys, .phaseDistortion, .karplusPluck].randomElement()!
+        leadVoice.instrument = [.syncLead, .wavetableMorph, .ringModKeys, .phaseDistortion, .karplusPluck, .synclavierDigital, .vectorMorph, .buchlaComplex, .solinaStringer].randomElement()!
         normalizeSequencerLanes()
         status = "Generated counter melody"
         pushAudioState()
@@ -661,24 +711,24 @@ final class AppModel: ObservableObject {
         switch style {
         case .acidLab:
             bassVoice = SynthVoice(instrument: .acidSaw, enabled: true, level: 0.55, octave: 1, cutoff: 0.62, resonance: 0.58, glide: 0.22, accent: 0.82, attack: 0.01, decay: 0.38, sustain: 0.08, drive: 0.58, filterEnvelope: 0.78, lfoRate: 0.22, lfoAmount: 0.22, morph: 0.34, unison: 0.12, detune: 0.07, subLevel: 0.38, noiseLevel: 0.04, fmAmount: 0.18, wavefold: 0.24, grainSize: 0.16, grainDensity: 0.24, bitcrush: 0.03)
-            leadVoice = SynthVoice(instrument: .syncLead, enabled: true, level: 0.34, octave: 3, cutoff: 0.74, resonance: 0.32, glide: 0.05, accent: 0.46, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.34, filterEnvelope: 0.46, lfoRate: 0.36, lfoAmount: 0.30, morph: 0.56, unison: 0.38, detune: 0.22, subLevel: 0.04, noiseLevel: 0.03, fmAmount: 0.28, wavefold: 0.22, grainSize: 0.18, grainDensity: 0.32, bitcrush: 0.07)
+            leadVoice = SynthVoice(instrument: .buchlaComplex, enabled: true, level: 0.34, octave: 3, cutoff: 0.74, resonance: 0.32, glide: 0.05, accent: 0.46, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.34, filterEnvelope: 0.46, lfoRate: 0.36, lfoAmount: 0.30, morph: 0.62, unison: 0.26, detune: 0.18, subLevel: 0.04, noiseLevel: 0.04, fmAmount: 0.62, wavefold: 0.74, grainSize: 0.18, grainDensity: 0.32, bitcrush: 0.07)
         case .berlinSchool:
             bassVoice = SynthVoice(instrument: .subSquare, enabled: true, level: 0.48, octave: 1, cutoff: 0.48, resonance: 0.24, glide: 0.18, accent: 0.38, attack: 0.02, decay: 0.62, sustain: 0.34, drive: 0.22, filterEnvelope: 0.28, lfoRate: 0.12, lfoAmount: 0.16, morph: 0.26, unison: 0.10, detune: 0.06, subLevel: 0.58, noiseLevel: 0.02, fmAmount: 0.08, wavefold: 0.08, grainSize: 0.20, grainDensity: 0.28, bitcrush: 0.0)
-            leadVoice = SynthVoice(instrument: .wavetableMorph, enabled: true, level: 0.38, octave: 3, cutoff: 0.70, resonance: 0.18, glide: 0.08, accent: 0.28, attack: 0.04, decay: 0.72, sustain: 0.44, drive: 0.18, filterEnvelope: 0.28, lfoRate: 0.18, lfoAmount: 0.30, morph: 0.70, unison: 0.28, detune: 0.18, subLevel: 0.04, noiseLevel: 0.03, fmAmount: 0.30, wavefold: 0.08, grainSize: 0.30, grainDensity: 0.42, bitcrush: 0.01)
+            leadVoice = SynthVoice(instrument: .solinaStringer, enabled: true, level: 0.38, octave: 3, cutoff: 0.70, resonance: 0.18, glide: 0.08, accent: 0.28, attack: 0.08, decay: 0.78, sustain: 0.52, drive: 0.18, filterEnvelope: 0.28, lfoRate: 0.18, lfoAmount: 0.38, morph: 0.62, unison: 0.54, detune: 0.30, subLevel: 0.04, noiseLevel: 0.03, fmAmount: 0.18, wavefold: 0.08, grainSize: 0.30, grainDensity: 0.42, bitcrush: 0.01)
         case .psychedelicTrance:
             bassVoice = SynthVoice(instrument: .reeseBass, enabled: true, level: 0.52, octave: 1, cutoff: 0.42, resonance: 0.30, glide: 0.06, accent: 0.64, attack: 0.01, decay: 0.30, sustain: 0.08, drive: 0.48, filterEnvelope: 0.52, lfoRate: 0.28, lfoAmount: 0.22, morph: 0.46, unison: 0.58, detune: 0.34, subLevel: 0.54, noiseLevel: 0.02, fmAmount: 0.14, wavefold: 0.20, grainSize: 0.12, grainDensity: 0.22, bitcrush: 0.02)
-            leadVoice = SynthVoice(instrument: .superSaw, enabled: true, level: 0.34, octave: 3, cutoff: 0.80, resonance: 0.20, glide: 0.03, accent: 0.48, attack: 0.01, decay: 0.42, sustain: 0.18, drive: 0.26, filterEnvelope: 0.42, lfoRate: 0.44, lfoAmount: 0.28, morph: 0.62, unison: 0.72, detune: 0.42, subLevel: 0.02, noiseLevel: 0.02, fmAmount: 0.22, wavefold: 0.16, grainSize: 0.16, grainDensity: 0.30, bitcrush: 0.03)
+            leadVoice = SynthVoice(instrument: .vectorMorph, enabled: true, level: 0.34, octave: 3, cutoff: 0.80, resonance: 0.20, glide: 0.03, accent: 0.48, attack: 0.01, decay: 0.42, sustain: 0.18, drive: 0.26, filterEnvelope: 0.42, lfoRate: 0.44, lfoAmount: 0.40, morph: 0.78, unison: 0.68, detune: 0.38, subLevel: 0.02, noiseLevel: 0.02, fmAmount: 0.44, wavefold: 0.18, grainSize: 0.16, grainDensity: 0.30, bitcrush: 0.03)
         case .dubMutation:
             bassVoice = SynthVoice(instrument: .subSquare, enabled: true, level: 0.58, octave: 1, cutoff: 0.36, resonance: 0.20, glide: 0.24, accent: 0.46, attack: 0.02, decay: 0.72, sustain: 0.42, drive: 0.34, filterEnvelope: 0.24, lfoRate: 0.10, lfoAmount: 0.26, morph: 0.22, unison: 0.08, detune: 0.04, subLevel: 0.72, noiseLevel: 0.03, fmAmount: 0.06, wavefold: 0.06, grainSize: 0.24, grainDensity: 0.20, bitcrush: 0.0)
             leadVoice = SynthVoice(instrument: .ringModKeys, enabled: true, level: 0.28, octave: 3, cutoff: 0.58, resonance: 0.34, glide: 0.10, accent: 0.22, attack: 0.05, decay: 0.70, sustain: 0.34, drive: 0.18, filterEnvelope: 0.22, lfoRate: 0.20, lfoAmount: 0.34, morph: 0.50, unison: 0.16, detune: 0.12, subLevel: 0.02, noiseLevel: 0.04, fmAmount: 0.72, wavefold: 0.10, grainSize: 0.18, grainDensity: 0.28, bitcrush: 0.05)
         case .kosmischeAmbient:
             bassVoice = SynthVoice(instrument: .spectralDrone, enabled: true, level: 0.36, octave: 1, cutoff: 0.44, resonance: 0.34, glide: 0.42, accent: 0.18, attack: 0.28, decay: 0.92, sustain: 0.78, drive: 0.12, filterEnvelope: 0.16, lfoRate: 0.14, lfoAmount: 0.54, morph: 0.80, unison: 0.46, detune: 0.28, subLevel: 0.18, noiseLevel: 0.14, fmAmount: 0.24, wavefold: 0.06, grainSize: 0.62, grainDensity: 0.44, bitcrush: 0.01)
-            leadVoice = SynthVoice(instrument: .granularCloud, enabled: true, level: 0.30, octave: 3, cutoff: 0.72, resonance: 0.16, glide: 0.20, accent: 0.14, attack: 0.22, decay: 0.90, sustain: 0.68, drive: 0.12, filterEnvelope: 0.16, lfoRate: 0.18, lfoAmount: 0.48, morph: 0.78, unison: 0.32, detune: 0.20, subLevel: 0.04, noiseLevel: 0.20, fmAmount: 0.30, wavefold: 0.05, grainSize: 0.78, grainDensity: 0.86, bitcrush: 0.02)
+            leadVoice = SynthVoice(instrument: .mellotronTape, enabled: true, level: 0.30, octave: 3, cutoff: 0.72, resonance: 0.16, glide: 0.20, accent: 0.14, attack: 0.24, decay: 0.90, sustain: 0.68, drive: 0.12, filterEnvelope: 0.16, lfoRate: 0.18, lfoAmount: 0.48, morph: 0.78, unison: 0.32, detune: 0.34, subLevel: 0.04, noiseLevel: 0.22, fmAmount: 0.30, wavefold: 0.05, grainSize: 0.78, grainDensity: 0.86, bitcrush: 0.02)
         case .electroBreaks:
             bassVoice = SynthVoice(instrument: .phaseDistortion, enabled: true, level: 0.50, octave: 1, cutoff: 0.54, resonance: 0.36, glide: 0.10, accent: 0.54, attack: 0.01, decay: 0.44, sustain: 0.16, drive: 0.42, filterEnvelope: 0.50, lfoRate: 0.30, lfoAmount: 0.24, morph: 0.66, unison: 0.22, detune: 0.16, subLevel: 0.32, noiseLevel: 0.04, fmAmount: 0.58, wavefold: 0.34, grainSize: 0.18, grainDensity: 0.30, bitcrush: 0.16)
-            leadVoice = SynthVoice(instrument: .bitcrushLead, enabled: true, level: 0.34, octave: 3, cutoff: 0.64, resonance: 0.42, glide: 0.06, accent: 0.62, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.42, filterEnvelope: 0.50, lfoRate: 0.48, lfoAmount: 0.34, morph: 0.54, unison: 0.28, detune: 0.18, subLevel: 0.06, noiseLevel: 0.08, fmAmount: 0.46, wavefold: 0.26, grainSize: 0.16, grainDensity: 0.34, bitcrush: 0.56)
+            leadVoice = SynthVoice(instrument: .synclavierDigital, enabled: true, level: 0.34, octave: 3, cutoff: 0.64, resonance: 0.42, glide: 0.06, accent: 0.62, attack: 0.01, decay: 0.34, sustain: 0.10, drive: 0.42, filterEnvelope: 0.50, lfoRate: 0.48, lfoAmount: 0.34, morph: 0.64, unison: 0.20, detune: 0.12, subLevel: 0.06, noiseLevel: 0.06, fmAmount: 0.82, wavefold: 0.26, grainSize: 0.16, grainDensity: 0.34, bitcrush: 0.24)
         case .generativeRaga:
-            bassVoice = SynthVoice(instrument: .karplusPluck, enabled: true, level: 0.42, octave: 1, cutoff: 0.70, resonance: 0.22, glide: 0.08, accent: 0.58, attack: 0.00, decay: 0.32, sustain: 0.08, drive: 0.26, filterEnvelope: 0.52, lfoRate: 0.18, lfoAmount: 0.12, morph: 0.32, unison: 0.08, detune: 0.05, subLevel: 0.18, noiseLevel: 0.18, fmAmount: 0.16, wavefold: 0.12, grainSize: 0.14, grainDensity: 0.24, bitcrush: 0.0)
+            bassVoice = SynthVoice(instrument: .buchlaComplex, enabled: true, level: 0.42, octave: 1, cutoff: 0.70, resonance: 0.22, glide: 0.08, accent: 0.58, attack: 0.00, decay: 0.32, sustain: 0.08, drive: 0.26, filterEnvelope: 0.52, lfoRate: 0.18, lfoAmount: 0.12, morph: 0.42, unison: 0.08, detune: 0.05, subLevel: 0.18, noiseLevel: 0.16, fmAmount: 0.44, wavefold: 0.58, grainSize: 0.14, grainDensity: 0.24, bitcrush: 0.0)
             leadVoice = SynthVoice(instrument: .formantVox, enabled: true, level: 0.34, octave: 3, cutoff: 0.74, resonance: 0.52, glide: 0.12, accent: 0.30, attack: 0.08, decay: 0.70, sustain: 0.46, drive: 0.18, filterEnvelope: 0.30, lfoRate: 0.20, lfoAmount: 0.24, morph: 0.66, unison: 0.22, detune: 0.15, subLevel: 0.02, noiseLevel: 0.05, fmAmount: 0.30, wavefold: 0.08, grainSize: 0.34, grainDensity: 0.40, bitcrush: 0.02)
         }
     }
@@ -958,13 +1008,21 @@ final class AppModel: ObservableObject {
         videoEdgeGain = 0.86
         videoColorWarp = 0.92
         videoOscillatorRate = 0.74
+        feedbackSimulatorMode = .feedbackLab
+        feedbackSimulatorIntensity = 0.86
+        feedbackSimulatorDecay = 0.88
+        feedbackSimulatorZoom = 0.76
+        feedbackSimulatorTwist = 0.64
+        feedbackSimulatorDisplacement = 0.86
+        feedbackSimulatorPrism = 0.82
+        feedbackSimulatorAudioReactive = true
         cameraFeedbackMode = .echoTunnel
         cameraOverlayOpacity = 0.52
         cameraFeedbackAmount = 0.76
         cameraOverlayScale = 1.06
         cameraFeedbackRotation = 0.34
         cameraChromaShift = 0.62
-        holographicMode = .interference
+        holographicMode = .realisticStack
         minterEffectMode = .llamaFeedback
         demosceneEffectMode = .megaDemo
     }
@@ -982,6 +1040,14 @@ final class AppModel: ObservableObject {
         videoEdgeGain = 0.32
         videoColorWarp = 0.42
         videoOscillatorRate = 0.40
+        feedbackSimulatorMode = .off
+        feedbackSimulatorIntensity = 0.32
+        feedbackSimulatorDecay = 0.42
+        feedbackSimulatorZoom = 0.28
+        feedbackSimulatorTwist = 0.12
+        feedbackSimulatorDisplacement = 0.26
+        feedbackSimulatorPrism = 0.18
+        feedbackSimulatorAudioReactive = true
         cameraFeedbackMode = .optical
         cameraOverlayOpacity = 0.28
         cameraFeedbackAmount = 0.28
@@ -1054,6 +1120,14 @@ final class AppModel: ObservableObject {
         videoEdgeGain = scene.videoEdgeGain
         videoColorWarp = scene.videoColorWarp
         videoOscillatorRate = scene.videoOscillatorRate
+        feedbackSimulatorMode = scene.feedbackSimulatorMode
+        feedbackSimulatorIntensity = scene.feedbackSimulatorIntensity
+        feedbackSimulatorDecay = scene.feedbackSimulatorDecay
+        feedbackSimulatorZoom = scene.feedbackSimulatorZoom
+        feedbackSimulatorTwist = scene.feedbackSimulatorTwist
+        feedbackSimulatorDisplacement = scene.feedbackSimulatorDisplacement
+        feedbackSimulatorPrism = scene.feedbackSimulatorPrism
+        feedbackSimulatorAudioReactive = scene.feedbackSimulatorAudioReactive
         cameraFeedbackMode = scene.cameraFeedbackMode
         cameraOverlayOpacity = scene.cameraOverlayOpacity
         cameraFeedbackAmount = scene.cameraFeedbackAmount
@@ -1199,6 +1273,14 @@ final class AppModel: ObservableObject {
             videoEdgeGain: videoEdgeGain,
             videoColorWarp: videoColorWarp,
             videoOscillatorRate: videoOscillatorRate,
+            feedbackSimulatorMode: feedbackSimulatorMode,
+            feedbackSimulatorIntensity: feedbackSimulatorIntensity,
+            feedbackSimulatorDecay: feedbackSimulatorDecay,
+            feedbackSimulatorZoom: feedbackSimulatorZoom,
+            feedbackSimulatorTwist: feedbackSimulatorTwist,
+            feedbackSimulatorDisplacement: feedbackSimulatorDisplacement,
+            feedbackSimulatorPrism: feedbackSimulatorPrism,
+            feedbackSimulatorAudioReactive: feedbackSimulatorAudioReactive,
             cameraFeedbackMode: cameraFeedbackMode,
             cameraOverlayOpacity: cameraOverlayOpacity,
             cameraFeedbackAmount: cameraFeedbackAmount,
@@ -1221,6 +1303,8 @@ final class AppModel: ObservableObject {
         minterEffectMode = chooseTo ? to.minterMode : from.minterMode
         holographicMode = chooseTo ? to.holographicMode : from.holographicMode
         experimentalVideoMode = chooseTo ? to.experimentalVideoMode : from.experimentalVideoMode
+        feedbackSimulatorMode = chooseTo ? to.feedbackSimulatorMode : from.feedbackSimulatorMode
+        feedbackSimulatorAudioReactive = chooseTo ? to.feedbackSimulatorAudioReactive : from.feedbackSimulatorAudioReactive
         cameraFeedbackMode = chooseTo ? to.cameraFeedbackMode : from.cameraFeedbackMode
         cameraMirror = chooseTo ? to.cameraMirror : from.cameraMirror
 
@@ -1234,6 +1318,12 @@ final class AppModel: ObservableObject {
         videoEdgeGain = lerp(from.videoEdgeGain, to.videoEdgeGain, amount)
         videoColorWarp = lerp(from.videoColorWarp, to.videoColorWarp, amount)
         videoOscillatorRate = lerp(from.videoOscillatorRate, to.videoOscillatorRate, amount)
+        feedbackSimulatorIntensity = lerp(from.feedbackSimulatorIntensity, to.feedbackSimulatorIntensity, amount)
+        feedbackSimulatorDecay = lerp(from.feedbackSimulatorDecay, to.feedbackSimulatorDecay, amount)
+        feedbackSimulatorZoom = lerp(from.feedbackSimulatorZoom, to.feedbackSimulatorZoom, amount)
+        feedbackSimulatorTwist = lerp(from.feedbackSimulatorTwist, to.feedbackSimulatorTwist, amount)
+        feedbackSimulatorDisplacement = lerp(from.feedbackSimulatorDisplacement, to.feedbackSimulatorDisplacement, amount)
+        feedbackSimulatorPrism = lerp(from.feedbackSimulatorPrism, to.feedbackSimulatorPrism, amount)
         cameraOverlayOpacity = lerp(from.cameraOverlayOpacity, to.cameraOverlayOpacity, amount)
         cameraFeedbackAmount = lerp(from.cameraFeedbackAmount, to.cameraFeedbackAmount, amount)
         cameraOverlayScale = lerp(from.cameraOverlayScale, to.cameraOverlayScale, amount)
@@ -1326,6 +1416,14 @@ final class AppModel: ObservableObject {
             videoEdgeGain: videoEdgeGain,
             videoColorWarp: videoColorWarp,
             videoOscillatorRate: videoOscillatorRate,
+            feedbackSimulatorMode: feedbackSimulatorMode,
+            feedbackSimulatorIntensity: feedbackSimulatorIntensity,
+            feedbackSimulatorDecay: feedbackSimulatorDecay,
+            feedbackSimulatorZoom: feedbackSimulatorZoom,
+            feedbackSimulatorTwist: feedbackSimulatorTwist,
+            feedbackSimulatorDisplacement: feedbackSimulatorDisplacement,
+            feedbackSimulatorPrism: feedbackSimulatorPrism,
+            feedbackSimulatorAudioReactive: feedbackSimulatorAudioReactive,
             cameraInputEnabled: cameraInputEnabled,
             cameraOverlayOpacity: cameraOverlayOpacity,
             cameraFeedbackAmount: cameraFeedbackAmount,

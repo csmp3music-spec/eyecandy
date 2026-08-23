@@ -25,6 +25,7 @@ struct RendererView: View {
                     if model.demosceneEffectMode != .off { Text("DEMO") }
                     if model.minterEffectMode != .off { Text("MINTER") }
                     if model.holographicMode != .off { Text("HOLO") }
+                    if model.feedbackSimulatorMode != .off { Text("FDBK") }
                 }
                 .font(.caption.weight(.semibold))
                 .padding(8)
@@ -61,6 +62,7 @@ struct RendererView: View {
         drawHolographicLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawPaletteAndGate(context: &context, size: size, time: time, preset: preset)
         drawExperimentalVideoMode(context: &context, size: size, time: time, preset: preset, beat: beat)
+        drawFeedbackSimulatorLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawCameraFeedbackOverlay(context: &context, size: size, time: time)
     }
 
@@ -580,11 +582,20 @@ struct RendererView: View {
             drawChromaVectorscope(context: &context, size: size, time: time, preset: preset, intensity: intensity)
         case .spectralParticles:
             drawSpectralParticles(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .feedbackWaveform:
+            drawFeedbackWaveformVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .spectralLattice:
+            drawSpectralLatticeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .phaseBloom:
+            drawPhaseBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
         case .hyperAnalyzer:
             drawSpectrumTunnel(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.72)
             drawOscilloscopeGarden(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.58, beat: beat)
             drawChromaVectorscope(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.74)
             drawSpectralParticles(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.62)
+            drawFeedbackWaveformVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.44, beat: beat)
+            drawSpectralLatticeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.42)
+            drawPhaseBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.36, beat: beat)
         }
     }
 
@@ -708,6 +719,105 @@ struct RendererView: View {
                 Path(ellipseIn: CGRect(x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter)),
                 with: .color(blendedColor(preset: preset, t: seed + time * 0.015 + model.audioMeter.spectralCentroid).opacity(alpha))
             )
+        }
+    }
+
+    private func drawFeedbackWaveformVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let center = CGPoint(x: size.width * (0.5 + model.audioMeter.stereoBalance * 0.05), y: size.height / 2)
+        let traces = 5 + Int(model.audioVisualizerPersistence * 9)
+        let points = 220
+        let shortest = min(size.width, size.height)
+
+        for trace in 0..<traces {
+            let echo = Double(trace) / Double(max(1, traces - 1))
+            let decay = pow(1.0 - echo, 1.4)
+            let radius = shortest * (0.09 + echo * (0.34 + model.audioMeter.bass * 0.12))
+            let phase = time * (0.45 + model.audioMeter.spectralFlux * 1.1) - echo * 1.7
+            var path = Path()
+            for pointIndex in 0...points {
+                let u = Double(pointIndex) / Double(points) * Double.pi * 2.0
+                let carrier = sin(u * (2.0 + model.audioMeter.mid * 7.0) + phase)
+                let mod = sin(u * (7.0 + model.audioVisualizerDetail * 9.0) - time * (1.1 + model.audioMeter.treble * 4.0))
+                let wobble = 1.0 + (carrier * 0.16 + mod * 0.07 + sin(beat * Double.pi * 2.0 + echo * 4.0) * model.audioMeter.bass * 0.10) * intensity
+                let angle = u + echo * 0.38 + time * 0.035
+                let p = CGPoint(x: center.x + cos(angle) * radius * wobble, y: center.y + sin(angle) * radius * wobble * (0.62 + model.macroY * 0.32))
+                if pointIndex == 0 {
+                    path.move(to: p)
+                } else {
+                    path.addLine(to: p)
+                }
+            }
+            context.stroke(path, with: .color(blendedColor(preset: preset, t: echo + time * 0.02).opacity(decay * intensity * (0.07 + model.audioMeter.spectralFlux * 0.20))), lineWidth: 0.8 + decay * (2.4 + model.audioMeter.transient * 4.0))
+        }
+    }
+
+    private func drawSpectralLatticeVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double) {
+        let cols = 10 + Int(model.audioVisualizerDetail * 18)
+        let rows = 7 + Int(model.audioVisualizerDetail * 12)
+        let cellW = size.width / Double(cols)
+        let cellH = size.height / Double(rows)
+        let depth = 14.0 + intensity * 38.0 + model.audioMeter.bass * 34.0
+
+        for row in 0...rows {
+            var path = Path()
+            for col in 0...cols {
+                let nx = Double(col) / Double(cols)
+                let ny = Double(row) / Double(rows)
+                let bin = spectrumBin(col + row * cols, count: max(1, cols * rows), time: time)
+                let warp = sin(nx * 12.0 + ny * 7.0 + time * (0.7 + model.audioMeter.spectralCentroid)) * depth * bin
+                let x = nx * size.width + sin(ny * 9.0 + time) * model.audioMeter.stereoBalance * 18.0
+                let y = ny * size.height + warp
+                if col == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(path, with: .color(blendedColor(preset: preset, t: Double(row) / Double(max(1, rows)) + time * 0.018).opacity(0.035 + intensity * 0.11)), lineWidth: 0.8 + model.audioMeter.treble * 2.6)
+        }
+
+        for col in 0...cols {
+            var path = Path()
+            for row in 0...rows {
+                let nx = Double(col) / Double(cols)
+                let ny = Double(row) / Double(rows)
+                let bin = spectrumBin(row + col * rows, count: max(1, cols * rows), time: time + 0.31)
+                let warp = cos(ny * 11.0 - nx * 6.0 - time * (0.8 + model.audioMeter.spectralFlux)) * depth * bin
+                let x = nx * size.width + warp
+                let y = ny * size.height + cos(nx * 8.0 - time) * model.audioMeter.stereoBalance * 14.0
+                if row == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(path, with: .color(blendedColor(preset: preset, t: Double(col) / Double(max(1, cols)) + 0.33 + time * 0.018).opacity(0.025 + intensity * 0.09)), lineWidth: 0.7 + model.audioMeter.mid * 2.2)
+        }
+
+        for row in 0..<rows {
+            for col in 0..<cols where (row + col) % 3 == 0 {
+                let value = spectrumBin(col + row * cols, count: max(1, cols * rows), time: time)
+                guard value > 0.18 else { continue }
+                let x = Double(col) * cellW + cellW * 0.5
+                let y = Double(row) * cellH + cellH * 0.5
+                let radius = (1.4 + value * 6.5 + model.audioMeter.transient * 8.0) * intensity
+                context.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)), with: .color(blendedColor(preset: preset, t: value + time * 0.02).opacity(0.05 + value * intensity * 0.22)))
+            }
+        }
+    }
+
+    private func drawPhaseBloomVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let petals = 9 + Int(model.audioVisualizerDetail * 23)
+        let shortest = min(size.width, size.height)
+        for petal in 0..<petals {
+            let t = Double(petal) / Double(petals)
+            let phase = time * (0.12 + model.audioMeter.spectralCentroid * 0.36) + t * Double.pi * 2.0
+            let phaseOffset = sin(time * 0.6 + t * 13.0) * model.audioMeter.stereoBalance * 0.45
+            let radius = shortest * (0.10 + 0.38 * abs(sin(phase + beat * Double.pi)))
+            let width = shortest * (0.06 + model.audioMeter.bass * 0.11 + intensity * 0.07)
+            let height = shortest * (0.18 + model.audioMeter.treble * 0.20 + intensity * 0.14)
+            let x = center.x + cos(phase + phaseOffset) * radius * 0.48
+            let y = center.y + sin(phase * (0.72 + model.macroY * 0.42)) * radius * 0.35
+            let rect = CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+            var layer = context
+            layer.opacity = intensity * (0.035 + model.audioMeter.spectralFlux * 0.16 + model.audioMeter.transient * 0.08)
+            layer.translateBy(x: x, y: y)
+            layer.rotate(by: .radians(phase + Double.pi * 0.5))
+            layer.translateBy(x: -x, y: -y)
+            layer.fill(Path(ellipseIn: rect), with: .color(blendedColor(preset: preset, t: t + time * 0.035)))
         }
     }
 
@@ -1366,16 +1476,18 @@ struct RendererView: View {
 
     private func drawHolographicLayer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double) {
         guard model.holographicMode != .off || preset.family == .holographic else { return }
+        let mode: HolographicMode = model.holographicMode == .off ? .ghostPrism : model.holographicMode
         let depth = model.hologramDepth
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
 
-        for line in 0..<54 {
-            let y = size.height * Double(line) / 54.0
-            let wave = sin(time * 6.0 + Double(line) * 0.34) * depth * 8.0
+        let scanLines = mode == .realisticStack ? 72 : 54
+        for line in 0..<scanLines {
+            let y = size.height * Double(line) / Double(scanLines)
+            let wave = sin(time * 6.0 + Double(line) * 0.34) * depth * (mode == .realisticStack ? 12.0 : 8.0)
             var scan = Path()
             scan.move(to: CGPoint(x: 0, y: y + wave))
             scan.addLine(to: CGPoint(x: size.width, y: y - wave))
-            context.stroke(scan, with: .color(Color.cyan.opacity(0.025 + depth * 0.055)), lineWidth: 1)
+            context.stroke(scan, with: .color(Color.cyan.opacity(0.018 + depth * 0.050)), lineWidth: 0.8)
         }
 
         for shell in 0..<10 {
@@ -1389,7 +1501,19 @@ struct RendererView: View {
             )
         }
 
-        if model.holographicMode == .chromaDepth || model.holographicMode == .interference {
+        if mode == .pepperGhost || mode == .realisticStack {
+            drawPepperGhostStage(context: &context, size: size, time: time, preset: preset, beat: beat, depth: depth)
+        }
+
+        if mode == .lightField || mode == .realisticStack {
+            drawLightFieldVolume(context: &context, size: size, time: time, preset: preset, beat: beat, depth: depth)
+        }
+
+        if mode == .cghSpeckle || mode == .realisticStack || mode == .interference {
+            drawCGHSpeckle(context: &context, size: size, time: time, preset: preset, depth: depth)
+        }
+
+        if mode == .chromaDepth || mode == .interference || mode == .realisticStack {
             for band in 0..<18 {
                 let y = size.height * Double(band) / 18.0
                 let offset = sin(time * 2.0 + Double(band) * 0.8) * depth * 42.0
@@ -1404,6 +1528,147 @@ struct RendererView: View {
                 context.stroke(blue, with: .color(.cyan.opacity(0.08 + depth * 0.10)), lineWidth: 1.5)
             }
         }
+    }
+
+    private func drawPepperGhostStage(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, depth: Double) {
+        let shortest = min(size.width, size.height)
+        let topInset = max(20, size.width * (0.22 - depth * 0.04))
+        let bottomInset = max(12, size.width * (0.10 - depth * 0.025))
+        let topY = size.height * 0.18
+        let bottomY = size.height * 0.84
+
+        var plane = Path()
+        plane.move(to: CGPoint(x: topInset, y: topY))
+        plane.addLine(to: CGPoint(x: size.width - topInset, y: topY + shortest * 0.035))
+        plane.addLine(to: CGPoint(x: size.width - bottomInset, y: bottomY))
+        plane.addLine(to: CGPoint(x: bottomInset, y: bottomY - shortest * 0.045))
+        plane.closeSubpath()
+        context.fill(plane, with: .color(Color(red: 0.10, green: 0.95, blue: 1.0).opacity(0.018 + depth * 0.035)))
+        context.stroke(plane, with: .color(Color(red: 0.64, green: 1.0, blue: 0.94).opacity(0.10 + depth * 0.18)), lineWidth: 1.0 + depth * 2.2)
+
+        let center = CGPoint(x: size.width * (0.50 + sin(time * 0.19) * 0.035), y: size.height * (0.55 + cos(time * 0.13) * 0.03))
+        let layers = modeSensitiveLayerCount(base: 5, depth: depth)
+        for echo in 0..<layers {
+            let t = Double(echo) / Double(max(1, layers - 1))
+            let lift = shortest * (0.18 + t * 0.12 + beat * 0.04)
+            let drift = sin(time * 0.6 + t * 4.7) * shortest * depth * (0.03 + t * 0.02)
+            let width = shortest * (0.20 + t * 0.06)
+            let height = shortest * (0.38 - t * 0.05)
+            let x = center.x + drift + (t - 0.5) * shortest * depth * 0.12
+            let y = center.y - lift * 0.35 + t * shortest * 0.05
+            let alpha = (1.0 - t * 0.72) * (0.070 + depth * 0.12)
+
+            let body = CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+            context.stroke(Path(ellipseIn: body), with: .color(Color(red: 0.35, green: 1.0, blue: 0.88).opacity(alpha)), lineWidth: 0.9 + depth * 2.2)
+            context.stroke(Path(ellipseIn: body.insetBy(dx: width * 0.18, dy: height * 0.20)), with: .color(preset.colorC.opacity(alpha * 0.55)), lineWidth: 0.7 + depth * 1.4)
+
+            var spine = Path()
+            spine.move(to: CGPoint(x: x, y: body.minY + height * 0.18))
+            spine.addCurve(
+                to: CGPoint(x: x + sin(time + t * 3.0) * width * 0.16, y: body.maxY - height * 0.16),
+                control1: CGPoint(x: x - width * 0.20, y: y - height * 0.10),
+                control2: CGPoint(x: x + width * 0.24, y: y + height * 0.20)
+            )
+            context.stroke(spine, with: .color(Color.white.opacity(alpha * 0.62)), lineWidth: 0.55 + depth)
+        }
+
+        let shadow = CGRect(x: center.x - shortest * 0.24, y: size.height * 0.82, width: shortest * 0.48, height: shortest * 0.055)
+        context.fill(Path(ellipseIn: shadow), with: .color(Color.black.opacity(0.18 + depth * 0.18)))
+
+        for glint in 0..<10 {
+            let t = Double(glint) / 9.0
+            let x = bottomInset + (size.width - bottomInset * 2.0) * t
+            let y = bottomY - shortest * 0.03 + sin(time * 1.4 + t * 8.0) * shortest * 0.012
+            var ray = Path()
+            ray.move(to: CGPoint(x: x, y: y))
+            ray.addLine(to: CGPoint(x: x + shortest * (0.035 + depth * 0.05), y: y - shortest * (0.08 + depth * 0.04)))
+            context.stroke(ray, with: .color(Color.white.opacity(0.035 + depth * 0.085)), lineWidth: 0.7 + depth * 1.2)
+        }
+    }
+
+    private func drawLightFieldVolume(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, depth: Double) {
+        let shortest = min(size.width, size.height)
+        let center = CGPoint(x: size.width * (0.50 + sin(time * 0.07) * 0.04), y: size.height * (0.50 + cos(time * 0.09) * 0.04))
+        let slices = 22
+        for slice in 0..<slices {
+            let t = Double(slice) / Double(max(1, slices - 1))
+            let z = (t - 0.5) * 2.0
+            let parallax = z * shortest * depth * 0.18
+            let wobble = sin(time * 0.45 + t * 9.0)
+            let w = shortest * (0.18 + t * 0.42)
+            let h = shortest * (0.10 + t * 0.22)
+            let rect = CGRect(
+                x: center.x - w / 2 + parallax * 0.55 + wobble * depth * 18.0,
+                y: center.y - h / 2 + parallax * 0.18 + cos(time * 0.37 + t * 6.0) * depth * 16.0,
+                width: w,
+                height: h
+            )
+            let alpha = (1.0 - abs(z) * 0.58) * (0.020 + depth * 0.070)
+            context.stroke(Path(ellipseIn: rect), with: .color(blendedColor(preset: preset, t: t + time * 0.025).opacity(alpha)), lineWidth: 0.8 + depth * 1.8)
+
+            if slice % 2 == 0 {
+                var cross = Path()
+                cross.move(to: CGPoint(x: rect.minX, y: rect.midY))
+                cross.addLine(to: CGPoint(x: rect.maxX, y: rect.midY + sin(time + t * 7.0) * h * 0.22))
+                context.stroke(cross, with: .color(Color.cyan.opacity(alpha * 0.85)), lineWidth: 0.5 + depth)
+            }
+
+            for voxel in 0..<7 {
+                let seedA = Double((slice * 73 + voxel * 41 + model.sceneSeed * 17) % 997) / 997.0
+                let seedB = Double((slice * 29 + voxel * 67 + model.sceneSeed * 23) % 991) / 991.0
+                let angle = seedA * .pi * 2.0 + time * (0.18 + seedB * 0.22)
+                let radius = seedB * 0.48
+                let x = rect.midX + cos(angle) * rect.width * radius
+                let y = rect.midY + sin(angle * 1.7) * rect.height * radius
+                let d = shortest * (0.0035 + seedA * 0.0045) * (0.7 + depth)
+                context.fill(Path(ellipseIn: CGRect(x: x - d / 2, y: y - d / 2, width: d, height: d)), with: .color(Color.white.opacity(alpha * (1.6 + seedB))))
+            }
+        }
+
+        for ray in 0..<28 {
+            let t = Double(ray) / 28.0
+            let angle = t * .pi * 2.0 + sin(time * 0.19) * 0.35
+            let inner = shortest * (0.08 + beat * 0.08)
+            let outer = shortest * (0.32 + depth * 0.28 + 0.05 * sin(time + t * 11.0))
+            var path = Path()
+            path.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner * 0.58))
+            path.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer * 0.58))
+            context.stroke(path, with: .color(preset.colorB.opacity(0.018 + depth * 0.045)), lineWidth: 0.6 + depth * 1.3)
+        }
+    }
+
+    private func drawCGHSpeckle(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, depth: Double) {
+        let grains = 150 + Int(depth * 180)
+        for grain in 0..<grains {
+            let sx = Double((grain * 37 + model.sceneSeed * 11) % 997) / 997.0
+            let sy = Double((grain * 61 + model.sceneSeed * 19) % 991) / 991.0
+            let x = sx * size.width
+            let y = sy * size.height
+            let carrier = sin(x * 0.018 + y * 0.013 + time * 1.6 + Double(grain % 17))
+            let shimmer = 0.5 + 0.5 * sin(time * (0.68 + Double(grain % 13) * 0.033) + Double(grain) * 1.913)
+            let alpha = (0.010 + carrier * carrier * 0.034 + shimmer * 0.026) * depth
+            let diameter = 0.75 + sx * (1.7 + depth * 1.6)
+            let color = grain % 5 == 0 ? blendedColor(preset: preset, t: sx + time * 0.01) : Color(red: 0.78, green: 1.0, blue: 0.96)
+            context.fill(Path(ellipseIn: CGRect(x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter)), with: .color(color.opacity(alpha)))
+        }
+
+        let rows = 18
+        for row in 0..<rows {
+            let t = Double(row) / Double(rows)
+            var fringe = Path()
+            fringe.move(to: CGPoint(x: 0, y: size.height * t))
+            let step = max(10.0, size.width / 96.0)
+            for x in stride(from: 0.0, through: size.width, by: step) {
+                let phase = x * 0.018 + t * 19.0 + time * (0.55 + depth)
+                let y = size.height * t + sin(phase) * (8.0 + depth * 28.0) + cos(phase * 0.43) * depth * 18.0
+                fringe.addLine(to: CGPoint(x: x, y: y))
+            }
+            context.stroke(fringe, with: .color(Color(red: 0.55, green: 1.0, blue: 0.92).opacity(0.018 + depth * 0.052)), lineWidth: 0.55 + depth * 1.15)
+        }
+    }
+
+    private func modeSensitiveLayerCount(base: Int, depth: Double) -> Int {
+        max(base, base + Int(depth * 4.0))
     }
 
     private func drawExperimentalVideoMode(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double) {
@@ -1849,6 +2114,199 @@ struct RendererView: View {
             context.fill(Path(ellipseIn: rect), with: .color(Color.hsba(t + time * 0.04, 0.92, 1.0).opacity(0.035 + intensity * 0.14)))
             context.fill(Path(CGRect(x: x - radius * 1.8, y: y - 2, width: radius * 3.6, height: 4 + model.videoEdgeGain * 10)), with: .color(preset.colorC.opacity(0.025 + intensity * 0.08)))
         }
+    }
+
+    private func drawFeedbackSimulatorLayer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double) {
+        guard model.feedbackSimulatorMode != .off, model.feedbackSimulatorIntensity > 0.01 else { return }
+        let capped = model.flashSafety ? min(model.feedbackSimulatorIntensity, 0.84) : model.feedbackSimulatorIntensity
+        let music = musicEnergy(at: time)
+        let analyzer = (model.audioMeter.bass + model.audioMeter.mid + model.audioMeter.treble + model.audioMeter.spectralFlux) * 0.25
+        let energy = model.feedbackSimulatorAudioReactive ? min(1.0, max(music, analyzer)) : 0.42
+
+        switch model.feedbackSimulatorMode {
+        case .off:
+            return
+        case .opticalTunnel:
+            drawFeedbackOpticalTunnel(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped, energy: energy)
+        case .prismHall:
+            drawFeedbackPrismHall(context: &context, size: size, time: time, preset: preset, intensity: capped, energy: energy)
+        case .lumaBloomMemory:
+            drawFeedbackLumaBloomMemory(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped, energy: energy)
+        case .chromaWarpField:
+            drawFeedbackChromaWarpField(context: &context, size: size, time: time, preset: preset, intensity: capped, energy: energy)
+        case .scanlineMemory:
+            drawFeedbackScanlineMemory(context: &context, size: size, time: time, preset: preset, intensity: capped, energy: energy)
+        case .mirrorLabyrinth:
+            drawFeedbackMirrorLabyrinth(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped, energy: energy)
+        case .feedbackLab:
+            drawFeedbackOpticalTunnel(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped * 0.72, energy: energy)
+            drawFeedbackPrismHall(context: &context, size: size, time: time, preset: preset, intensity: capped * 0.62, energy: energy)
+            drawFeedbackLumaBloomMemory(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped * 0.58, energy: energy)
+            drawFeedbackChromaWarpField(context: &context, size: size, time: time, preset: preset, intensity: capped * 0.54, energy: energy)
+            drawFeedbackScanlineMemory(context: &context, size: size, time: time, preset: preset, intensity: capped * 0.48, energy: energy)
+            drawFeedbackMirrorLabyrinth(context: &context, size: size, time: time, preset: preset, beat: beat, intensity: capped * 0.50, energy: energy)
+        }
+    }
+
+    private func drawFeedbackOpticalTunnel(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width * (0.5 + (model.macroX - 0.5) * 0.28), y: size.height * (0.5 + (0.5 - model.macroY) * 0.22))
+        let shortest = min(size.width, size.height)
+        let echoes = 10 + Int(model.feedbackSimulatorDecay * 22)
+        let zoom = 0.018 + model.feedbackSimulatorZoom * 0.060
+        for echo in 0..<echoes {
+            let t = Double(echo) / Double(max(1, echoes - 1))
+            let falloff = pow(1.0 - t, 0.9 + (1.0 - model.feedbackSimulatorDecay) * 1.6)
+            let inset = shortest * t * zoom * (1.0 + energy * 0.38)
+            let wobble = sin(time * (0.55 + model.videoOscillatorRate * 1.4) + t * 12.0) * shortest * 0.018 * model.feedbackSimulatorDisplacement
+            let rect = CGRect(x: inset + wobble, y: inset - wobble * 0.7, width: size.width - inset * 2, height: size.height - inset * 2)
+            let rotation = (t - 0.5) * model.feedbackSimulatorTwist * Double.pi * 0.38 + sin(beat * Double.pi * 2.0 + t * 5.0) * 0.018 * energy
+            var layer = context
+            layer.translateBy(x: center.x, y: center.y)
+            layer.rotate(by: .radians(rotation))
+            layer.translateBy(x: -center.x, y: -center.y)
+            layer.stroke(Path(roundedRect: rect, cornerRadius: 6 + (1.0 - t) * 22), with: .color(blendedColor(preset: preset, t: t + time * 0.025).opacity(falloff * intensity * 0.16)), lineWidth: 0.8 + falloff * (2.2 + energy * 4.0))
+            if echo % 3 == 0 {
+                let ring = inset * (1.4 + model.feedbackSimulatorZoom)
+                layer.stroke(Path(ellipseIn: CGRect(x: center.x - ring, y: center.y - ring * 0.56, width: ring * 2, height: ring * 1.12)), with: .color(preset.colorC.opacity(falloff * intensity * 0.07)), lineWidth: 0.7 + energy * 2.0)
+            }
+        }
+    }
+
+    private func drawFeedbackPrismHall(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let echoes = 7 + Int(model.feedbackSimulatorPrism * 13)
+        let channels: [(Color, Double, Double)] = [(.red, 0.0, 1.0), (.green, 0.33, -0.6), (.cyan, 0.66, 0.8)]
+        for echo in 0..<echoes {
+            let t = Double(echo) / Double(max(1, echoes - 1))
+            let radius = shortest * (0.08 + t * (0.55 + model.feedbackSimulatorZoom * 0.24))
+            let sides = 3 + Int(model.feedbackSimulatorPrism * 7)
+            for (color, hueOffset, direction) in channels {
+                let split = shortest * model.feedbackSimulatorPrism * 0.020 * direction * (1.0 + t * 3.0)
+                let rotation = time * (0.04 + model.feedbackSimulatorTwist * 0.20) * direction + t * Double.pi * 0.7
+                var path = Path()
+                for side in 0...sides {
+                    let u = Double(side) / Double(sides) * Double.pi * 2.0 + rotation
+                    let refract = sin(u * 2.0 + time * 1.7 + energy * 3.0) * model.feedbackSimulatorDisplacement * shortest * 0.018
+                    let p = CGPoint(x: center.x + cos(u) * (radius + refract) + split, y: center.y + sin(u) * (radius * 0.72 - refract * 0.4))
+                    if side == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                let alpha = pow(1.0 - t, 1.2) * intensity * (0.08 + model.feedbackSimulatorPrism * 0.11)
+                context.stroke(path, with: .color(color.opacity(alpha)), lineWidth: 0.7 + energy * 2.0)
+                if echo % 2 == 0 {
+                    context.stroke(path, with: .color(blendedColor(preset: preset, t: hueOffset + t + time * 0.02).opacity(alpha * 0.55)), lineWidth: 1.6 + model.feedbackSimulatorPrism * 2.0)
+                }
+            }
+        }
+    }
+
+    private func drawFeedbackLumaBloomMemory(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, intensity: Double, energy: Double) {
+        let cells = 18 + Int(model.feedbackSimulatorDisplacement * 26)
+        let cellW = size.width / Double(cells)
+        let cellH = size.height / Double(cells)
+        let threshold = model.videoKeyThreshold * 0.72
+        for y in 0..<cells {
+            for x in 0..<cells {
+                let nx = Double(x) / Double(cells) - 0.5
+                let ny = Double(y) / Double(cells) - 0.5
+                let luma = 0.50
+                    + sin(nx * 13.0 + time * (0.8 + model.videoOscillatorRate * 2.6)) * 0.22
+                    + cos(ny * 11.0 - time * 1.2) * 0.20
+                    + sin((nx * nx + ny * ny) * 38.0 - beat * Double.pi * 2.0) * 0.18
+                    + energy * 0.18
+                guard luma > threshold else { continue }
+                let key = min(1.0, (luma - threshold) / max(0.08, 1.0 - threshold))
+                let memory = pow(key, 0.7 + (1.0 - model.feedbackSimulatorDecay) * 1.8)
+                let bloom = min(cellW, cellH) * (0.12 + memory * (0.42 + model.feedbackSimulatorZoom * 0.38))
+                let cx = Double(x) * cellW + cellW * 0.5 + sin(time + ny * 8.0) * cellW * model.feedbackSimulatorDisplacement * 0.45
+                let cy = Double(y) * cellH + cellH * 0.5 + cos(time * 0.8 + nx * 8.0) * cellH * model.feedbackSimulatorDisplacement * 0.45
+                context.fill(Path(ellipseIn: CGRect(x: cx - bloom, y: cy - bloom, width: bloom * 2, height: bloom * 2)), with: .color(blendedColor(preset: preset, t: luma + time * 0.026).opacity(memory * intensity * 0.14)))
+            }
+        }
+    }
+
+    private func drawFeedbackChromaWarpField(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, energy: Double) {
+        let rows = 14 + Int(model.feedbackSimulatorDisplacement * 20)
+        let cols = 18 + Int(model.feedbackSimulatorDisplacement * 28)
+        let amp = min(size.width, size.height) * (0.014 + model.feedbackSimulatorDisplacement * 0.055) * (0.7 + energy)
+        for row in 0...rows {
+            let ny = Double(row) / Double(max(1, rows))
+            var path = Path()
+            for col in 0...cols {
+                let nx = Double(col) / Double(max(1, cols))
+                let field = feedbackNoise(nx * 3.2 + model.macroX, ny * 2.8 + model.macroY, time * (0.18 + model.videoOscillatorRate * 0.4))
+                let twist = sin((nx - 0.5) * (ny - 0.5) * 26.0 + time * (0.7 + model.feedbackSimulatorTwist)) * amp * model.feedbackSimulatorTwist
+                let x = nx * size.width + field * amp + twist
+                let y = ny * size.height + sin(field * Double.pi + time + nx * 7.0) * amp * 0.55
+                if col == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(path, with: .color(blendedColor(preset: preset, t: ny + time * 0.018).opacity(0.035 + intensity * 0.095)), lineWidth: 0.7 + energy * 2.0)
+        }
+        for col in 0...cols where col % 2 == 0 {
+            let nx = Double(col) / Double(max(1, cols))
+            var path = Path()
+            for row in 0...rows {
+                let ny = Double(row) / Double(max(1, rows))
+                let field = feedbackNoise(nx * 2.8 - model.macroY, ny * 3.3 + model.macroX, time * (0.16 + model.videoOscillatorRate * 0.36) + 2.1)
+                let x = nx * size.width + cos(field * Double.pi * 2.0 + time) * amp * 0.65
+                let y = ny * size.height + field * amp
+                if row == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(path, with: .color(preset.colorC.opacity(0.020 + intensity * 0.065)), lineWidth: 0.6 + model.feedbackSimulatorPrism * 1.6)
+        }
+    }
+
+    private func drawFeedbackScanlineMemory(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, energy: Double) {
+        let spacing = 3.0 + (1.0 - model.feedbackSimulatorDecay) * 9.0
+        let driftScale = size.width * (0.012 + model.feedbackSimulatorDisplacement * 0.10)
+        var rowIndex = 0
+        for row in stride(from: 0.0, to: size.height, by: spacing) {
+            let t = row / max(1.0, size.height)
+            let decay = pow(1.0 - t * 0.32, 1.0 + (1.0 - model.feedbackSimulatorDecay) * 2.0)
+            let drift = sin(row * 0.030 + time * (1.2 + model.videoOscillatorRate * 3.0)) * driftScale
+                + sin(time * 0.7 + Double(rowIndex) * 0.43) * driftScale * 0.35 * energy
+            var path = Path()
+            path.move(to: CGPoint(x: drift, y: row))
+            path.addLine(to: CGPoint(x: size.width + drift, y: row + sin(time + t * 10.0) * model.feedbackSimulatorTwist * 8.0))
+            context.stroke(path, with: .color(blendedColor(preset: preset, t: t + time * 0.018).opacity(decay * (0.020 + intensity * 0.065))), lineWidth: 0.7 + energy * 1.8)
+            if rowIndex % 11 == 0 {
+                context.fill(Path(CGRect(x: drift * 0.35, y: row, width: size.width, height: max(1.0, spacing * (1.0 + model.feedbackSimulatorZoom * 2.0)))), with: .color(Color.green.opacity(decay * intensity * 0.025)))
+            }
+            rowIndex += 1
+        }
+    }
+
+    private func drawFeedbackMirrorLabyrinth(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, intensity: Double, energy: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let symmetry = 5 + Int(model.feedbackSimulatorPrism * 11)
+        let depth = 8 + Int(model.feedbackSimulatorDecay * 16)
+        for ring in 0..<depth {
+            let t = Double(ring) / Double(max(1, depth - 1))
+            let radius = shortest * (0.06 + t * (0.54 + model.feedbackSimulatorZoom * 0.18))
+            let alpha = pow(1.0 - t, 1.15) * intensity * (0.055 + energy * 0.060)
+            for segment in 0..<symmetry {
+                let a = Double(segment) / Double(symmetry) * Double.pi * 2.0 + time * (0.025 + model.feedbackSimulatorTwist * 0.16) + t * 0.9
+                let b = a + Double.pi * 2.0 / Double(symmetry) * (0.44 + sin(beat * Double.pi * 2.0 + t * 5.0) * 0.08)
+                let fold = 0.72 + abs(sin(a * 2.0 + time)) * 0.36
+                var shard = Path()
+                shard.move(to: center)
+                shard.addLine(to: CGPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius * fold))
+                shard.addLine(to: CGPoint(x: center.x + cos(b) * radius * (1.0 + model.feedbackSimulatorDisplacement * 0.18), y: center.y + sin(b) * radius * fold))
+                shard.closeSubpath()
+                context.stroke(shard, with: .color(blendedColor(preset: preset, t: t + Double(segment) * 0.05 + time * 0.02).opacity(alpha)), lineWidth: 0.7 + model.feedbackSimulatorPrism * 2.2)
+                if segment % 2 == 0 {
+                    context.fill(shard, with: .color(blendedColor(preset: preset, t: 1.0 - t + Double(segment) * 0.03).opacity(alpha * 0.24)))
+                }
+            }
+        }
+    }
+
+    private func feedbackNoise(_ x: Double, _ y: Double, _ z: Double) -> Double {
+        let a = sin(x * 5.13 + z * 1.70) * 0.50
+        let b = cos(y * 6.71 - z * 1.31) * 0.32
+        let c = sin((x + y) * 9.23 + sin(z * 0.7) * 2.0) * 0.18
+        return a + b + c
     }
 
     private func drawCameraFeedbackOverlay(context: inout GraphicsContext, size: CGSize, time: TimeInterval) {

@@ -255,6 +255,8 @@ final class ProceduralAudioEngine {
         let saw = 2.0 * phaseStore - 1.0
         let square = phaseStore < 0.5 ? 1.0 : -1.0
         let sine = sin(phaseStore * .pi * 2.0)
+        let triangle = 1.0 - 4.0 * abs(phaseStore - 0.5)
+        let pulse = phaseStore < (0.16 + voice.morph * 0.64) ? 1.0 : -1.0
         let octaveSaw = 2.0 * ((phaseStore * 2.0).truncatingRemainder(dividingBy: 1)) - 1.0
         let sub = phaseStore < 0.25 || (phaseStore > 0.5 && phaseStore < 0.75) ? 1.0 : -1.0
         let lfo = sin(sampleTime * (0.08 + voice.lfoRate * 14.0) * .pi * 2.0)
@@ -279,6 +281,25 @@ final class ProceduralAudioEngine {
         let spectral = sine * 0.22
             + sin(phaseStore * .pi * 2.0 * (1.5 + morph * 3.5)) * 0.24
             + sin(phaseStore * .pi * 2.0 * (2.25 + voice.resonance * 5.0)) * 0.18
+        let tapeWow = sin(sampleTime * (0.22 + voice.lfoRate * 2.8) * .pi * 2.0) * (0.004 + voice.detune * 0.014)
+        let tapePhase = (phaseStore + tapeWow + noise * voice.noiseLevel * 0.012).truncatingRemainder(dividingBy: 1)
+        let tape = sin(tapePhase * .pi * 2.0) * 0.30
+            + sin(tapePhase * .pi * 4.0 + slow * 0.9) * 0.22
+            + formant * 0.24
+            + noise * (0.04 + voice.noiseLevel * 0.24)
+        let ensembleA = sin((phaseStore + detune * 0.45 + sin(sampleTime * 0.37) * 0.002).truncatingRemainder(dividingBy: 1) * .pi * 2.0)
+        let ensembleB = sin((phaseStore - detune * 0.65 + sin(sampleTime * 0.53 + 1.7) * 0.0025).truncatingRemainder(dividingBy: 1) * .pi * 2.0)
+        let stringer = (saw * 0.28 + pulse * 0.18 + ensembleA * 0.25 + ensembleB * 0.25) * (0.72 + slow * 0.18)
+        let complexMod = sin(phaseStore * .pi * 2.0 * (1.0 + voice.fmAmount * 5.0) + lfo * 0.4)
+        let buchla = sin(phaseStore * .pi * 2.0 + complexMod * (0.4 + voice.fmAmount * 5.6))
+        let foldedBuchla = sin(buchla * (1.0 + voice.wavefold * 7.0) + triangle * voice.morph * 1.8)
+        let synclavier = sin(phaseStore * .pi * 2.0 + sin(phaseStore * .pi * 2.0 * (2.0 + voice.morph * 6.0)) * (0.6 + voice.fmAmount * 8.0)) * 0.50
+            + sin(phaseStore * .pi * 2.0 * (3.0 + voice.resonance * 9.0)) * 0.18
+            + sin(phaseStore * .pi * 2.0 * (5.0 + voice.cutoff * 11.0)) * 0.10
+        let vectorMorph = sine * (1.0 - morph) * 0.40
+            + unisonSaw * morph * (1.0 - slow * 0.35) * 0.36
+            + fm * slow * 0.22
+            + ring * (1.0 - slow) * 0.18
         let raw: Double
         switch voice.instrument {
         case .acidSaw:
@@ -313,6 +334,16 @@ final class ProceduralAudioEngine {
             raw = unisonSaw * 0.58 + square * 0.22 + fm * 0.20
         case .spectralDrone:
             raw = spectral + noise * voice.noiseLevel * 0.65
+        case .buchlaComplex:
+            raw = foldedBuchla * 0.72 + triangle * 0.18 + noise * voice.noiseLevel * 0.18
+        case .mellotronTape:
+            raw = tape
+        case .solinaStringer:
+            raw = stringer
+        case .synclavierDigital:
+            raw = synclavier
+        case .vectorMorph:
+            raw = vectorMorph
         }
         let ratchetPhase = (phase * Double(max(1, ratchet))).truncatingRemainder(dividingBy: 1)
         let attack = max(0.001, voice.attack * 0.45)

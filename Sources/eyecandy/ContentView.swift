@@ -236,7 +236,11 @@ struct ContentView: View {
                     Menu("Camera Feedback") {
                         optionButtons(CameraFeedbackMode.allCases, selection: $model.cameraFeedbackMode)
                     }
+                    Menu("Feedback Simulator") {
+                        optionButtons(FeedbackSimulatorMode.allCases, selection: $model.feedbackSimulatorMode)
+                    }
                     Toggle("Camera Input", isOn: cameraInputBinding)
+                    Toggle("Simulator Audio Reactive", isOn: $model.feedbackSimulatorAudioReactive)
                     Toggle("Mirror Camera", isOn: $model.cameraMirror)
                     Toggle("Freeze Frame", isOn: $model.freezeFrame)
                     Toggle("Blackout", isOn: $model.blackout)
@@ -767,6 +771,17 @@ struct ContentView: View {
             Slider(value: $model.videoEdgeGain, in: 0...1) { Text("Edge gain") }
             Slider(value: $model.videoColorWarp, in: 0...1) { Text("Color warp") }
             Slider(value: $model.videoOscillatorRate, in: 0...1) { Text("Oscillator rate") }
+            Picker("Feedback simulator", selection: $model.feedbackSimulatorMode) {
+                ForEach(FeedbackSimulatorMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            Slider(value: $model.feedbackSimulatorIntensity, in: 0...1) { Text("Feedback sim intensity") }
+            Slider(value: $model.feedbackSimulatorDecay, in: 0...1) { Text("Feedback sim decay") }
+            Slider(value: $model.feedbackSimulatorZoom, in: 0...1) { Text("Feedback sim zoom") }
+            Slider(value: $model.feedbackSimulatorDisplacement, in: 0...1) { Text("Feedback sim displacement") }
+            Slider(value: $model.feedbackSimulatorPrism, in: 0...1) { Text("Feedback sim prism") }
 
             Toggle("Photon director", isOn: $model.photonDirectorEnabled)
             Toggle("Flash safety", isOn: $model.flashSafety)
@@ -986,6 +1001,23 @@ struct ContentView: View {
             Slider(value: $model.videoEdgeGain, in: 0...1) { Text("Processor edge gain") }
             Slider(value: $model.videoColorWarp, in: 0...1) { Text("Processor color warp") }
             Slider(value: $model.videoOscillatorRate, in: 0...1) { Text("Processor oscillator rate") }
+
+            Divider()
+
+            Text("Procedural Feedback Simulator").font(.headline)
+            Picker("Simulator mode", selection: $model.feedbackSimulatorMode) {
+                ForEach(FeedbackSimulatorMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            Toggle("Audio reactive simulator", isOn: $model.feedbackSimulatorAudioReactive)
+            Slider(value: $model.feedbackSimulatorIntensity, in: 0...1) { Text("Simulator intensity") }
+            Slider(value: $model.feedbackSimulatorDecay, in: 0...1) { Text("Frame memory / decay") }
+            Slider(value: $model.feedbackSimulatorZoom, in: 0...1) { Text("Recursive zoom") }
+            Slider(value: $model.feedbackSimulatorTwist, in: 0...1) { Text("Recursive twist") }
+            Slider(value: $model.feedbackSimulatorDisplacement, in: 0...1) { Text("Displacement") }
+            Slider(value: $model.feedbackSimulatorPrism, in: 0...1) { Text("Prism split") }
         }
     }
 
