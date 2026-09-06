@@ -16,6 +16,9 @@ struct RendererView: View {
                 HStack(spacing: 8) {
                     Text(model.selectedPreset.name)
                     Text("\(Int(model.sequencer.bpm)) BPM")
+                    if let active = model.activeSceneSlot {
+                        Text("S\(active + 1)")
+                    }
                     if let queued = model.queuedSceneSlot {
                         Text("Q\(queued + 1)")
                     }

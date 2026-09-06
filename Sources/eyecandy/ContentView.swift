@@ -382,6 +382,17 @@ struct ContentView: View {
                 }
                 .pickerStyle(.menu)
 
+                HStack {
+                    Text("\(model.savedSceneCount) / 8 scenes saved")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if model.queuedSceneSlot != nil {
+                        Button("Cancel Queue") { model.cancelQueuedScene() }
+                            .controlSize(.small)
+                    }
+                }
+
                 if let queued = model.queuedSceneSlot {
                     Text("Queued Scene \(queued + 1) for \(model.sceneLaunchQuantization.shortLabel)")
                         .font(.caption)
@@ -390,22 +401,7 @@ struct ContentView: View {
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 8) {
                     ForEach(0..<8, id: \.self) { slot in
-                        Button {
-                            model.recallScene(slot: slot)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Text(model.sceneDeck[slot] == nil ? "Empty" : "Scene \(slot + 1)")
-                                    .font(.caption.weight(.semibold))
-                                Text(model.sceneDeck[slot]?.name ?? "Save in Light Synth")
-                                    .font(.caption2)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 56)
-                        }
-                        .disabled(model.sceneDeck[slot] == nil)
-                        .buttonStyle(.bordered)
+                        sceneDeckSlotButton(slot, minHeight: 62)
                     }
                 }
 
@@ -479,6 +475,44 @@ struct ContentView: View {
         }
         .padding(12)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func sceneDeckSlotButton(_ slot: Int, minHeight: CGFloat = 58) -> some View {
+        Button {
+            model.recallScene(slot: slot)
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Text(model.sceneSlotTitle(slot))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    if let status = model.sceneSlotStatus(slot) {
+                        Text(status)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(sceneSlotAccent(slot))
+                    }
+                }
+                Text(model.sceneSlotSubtitle(slot))
+                    .font(.caption2)
+                    .lineLimit(2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+        }
+        .disabled(model.sceneDeck[slot] == nil)
+        .buttonStyle(.bordered)
+        .tint(sceneSlotAccent(slot))
+    }
+
+    private func sceneSlotAccent(_ slot: Int) -> Color {
+        if model.activeSceneSlot == slot {
+            return .green
+        }
+        if model.queuedSceneSlot == slot {
+            return .orange
+        }
+        return model.sceneDeck[slot] == nil ? .secondary : .cyan
     }
 
     private var presetPanel: some View {
@@ -847,13 +881,15 @@ struct ContentView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 8) {
                 ForEach(0..<8, id: \.self) { slot in
                     VStack(spacing: 4) {
-                        Button(model.sceneDeck[slot] == nil ? "Empty \(slot + 1)" : "Recall \(slot + 1)") {
-                            model.recallScene(slot: slot)
-                        }
-                        .disabled(model.sceneDeck[slot] == nil)
-                        .controlSize(.small)
-                        Button("Save \(slot + 1)") {
-                            model.saveScene(slot: slot)
+                        sceneDeckSlotButton(slot, minHeight: 52)
+                        HStack(spacing: 4) {
+                            Button("Save") {
+                                model.saveScene(slot: slot)
+                            }
+                            Button("Clear") {
+                                model.clearScene(slot: slot)
+                            }
+                            .disabled(model.sceneDeck[slot] == nil)
                         }
                         .controlSize(.small)
                     }
@@ -1031,32 +1067,41 @@ struct ContentView: View {
                 }
             }
             .pickerStyle(.menu)
+            Text("\(model.savedSceneCount) / 8 deck slots saved")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if let queued = model.queuedSceneSlot {
-                Text("Queued Scene \(queued + 1)")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                HStack {
+                    Text("Queued Scene \(queued + 1) for \(model.sceneLaunchQuantization.shortLabel)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Spacer()
+                    Button("Cancel") { model.cancelQueuedScene() }
+                        .controlSize(.small)
+                }
             }
 
             Divider()
 
             Text("Scene Morph").font(.headline)
             HStack {
-                Picker("From", selection: $model.sceneMorphFromSlot) {
+                Picker("From", selection: morphEndpointBinding(0)) {
                     ForEach(0..<8, id: \.self) { slot in
-                        Text("\(slot + 1)").tag(slot)
+                        Text(model.sceneDeck[slot] == nil ? "\(slot + 1) Empty" : "\(slot + 1) \(model.sceneDeck[slot]?.name ?? "")").tag(slot)
                     }
                 }
-                Picker("To", selection: $model.sceneMorphToSlot) {
+                Picker("To", selection: morphEndpointBinding(1)) {
                     ForEach(0..<8, id: \.self) { slot in
-                        Text("\(slot + 1)").tag(slot)
+                        Text(model.sceneDeck[slot] == nil ? "\(slot + 1) Empty" : "\(slot + 1) \(model.sceneDeck[slot]?.name ?? "")").tag(slot)
                     }
                 }
             }
             .pickerStyle(.menu)
             Slider(value: sceneMorphBinding, in: 0...1) { Text("Morph") }
+                .disabled(!model.canSceneMorph)
             Text("\(Int(model.sceneMorphAmount * 100))%  \(model.sceneDeck[model.sceneMorphFromSlot]?.name ?? "Empty") -> \(model.sceneDeck[model.sceneMorphToSlot]?.name ?? "Empty")")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(model.canSceneMorph ? Color.secondary : Color.orange)
             HStack {
                 Button("Save From") { model.saveMorphEndpoint(0) }
                 Button("Save To") { model.saveMorphEndpoint(1) }
@@ -1116,6 +1161,13 @@ struct ContentView: View {
         Binding(
             get: { model.sceneMorphAmount },
             set: { model.setSceneMorph($0) }
+        )
+    }
+
+    private func morphEndpointBinding(_ endpoint: Int) -> Binding<Int> {
+        Binding(
+            get: { endpoint == 0 ? model.sceneMorphFromSlot : model.sceneMorphToSlot },
+            set: { model.setSceneMorphEndpoint(endpoint, slot: $0) }
         )
     }
 

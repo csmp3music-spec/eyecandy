@@ -68,6 +68,7 @@ final class AppModel: ObservableObject {
     @Published var strobeEnabled = false
     @Published var strobeRate = 8.0
     @Published var sceneDeck: [LightSceneSnapshot?] = Array(repeating: nil, count: 8)
+    @Published var activeSceneSlot: Int?
     @Published var sceneLaunchQuantization: SceneLaunchQuantization = .nextBar
     @Published var queuedSceneSlot: Int?
     @Published var sceneMorphFromSlot = 0
@@ -138,6 +139,18 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var savedSceneCount: Int {
+        sceneDeck.reduce(0) { count, scene in count + (scene == nil ? 0 : 1) }
+    }
+
+    var canSceneMorph: Bool {
+        sceneDeck.indices.contains(sceneMorphFromSlot)
+            && sceneDeck.indices.contains(sceneMorphToSlot)
+            && sceneDeck[sceneMorphFromSlot] != nil
+            && sceneDeck[sceneMorphToSlot] != nil
+            && sceneMorphFromSlot != sceneMorphToSlot
+    }
+
     func startAudio() {
         do {
             pushAudioState()
@@ -177,6 +190,7 @@ final class AppModel: ObservableObject {
     func applyPreset(_ preset: VisualPreset) {
         selectedPreset = preset
         selectedFamily = preset.family
+        activeSceneSlot = nil
         regenerateVisualScene(for: preset)
     }
 
@@ -190,6 +204,7 @@ final class AppModel: ObservableObject {
     }
 
     func applyVideoPerformancePreset(_ preset: VideoPerformancePreset) {
+        activeSceneSlot = nil
         visualEngineMode = preset.visualEngine
         demosceneEffectMode = preset.demosceneMode
         minterEffectMode = preset.minterMode
@@ -282,6 +297,7 @@ final class AppModel: ObservableObject {
 
     func regenerateVisualScene(for preset: VisualPreset? = nil) {
         let activePreset = preset ?? selectedPreset
+        activeSceneSlot = nil
         let seed = Int.random(in: 1...999_999)
         sceneSeed = seed
         sceneCutTime = Date().timeIntervalSinceReferenceDate
@@ -1078,10 +1094,60 @@ final class AppModel: ObservableObject {
         status = cameraInput.status
     }
 
+    func sceneSlotTitle(_ slot: Int) -> String {
+        guard sceneDeck.indices.contains(slot) else { return "Scene" }
+        if activeSceneSlot == slot {
+            return "Live \(slot + 1)"
+        }
+        if queuedSceneSlot == slot {
+            return "Queued \(slot + 1)"
+        }
+        return sceneDeck[slot] == nil ? "Empty \(slot + 1)" : "Scene \(slot + 1)"
+    }
+
+    func sceneSlotSubtitle(_ slot: Int) -> String {
+        guard sceneDeck.indices.contains(slot) else { return "" }
+        guard let scene = sceneDeck[slot] else { return "Save current look" }
+        let visualMode = scene.experimentalVideoMode == .clean ? scene.lightSynthMode.rawValue : scene.experimentalVideoMode.rawValue
+        return "\(scene.preset.name) / \(visualMode)"
+    }
+
+    func sceneSlotStatus(_ slot: Int) -> String? {
+        guard sceneDeck.indices.contains(slot) else { return nil }
+        if activeSceneSlot == slot {
+            return "LIVE"
+        }
+        if queuedSceneSlot == slot {
+            return sceneLaunchQuantization.shortLabel.uppercased()
+        }
+        return nil
+    }
+
     func saveScene(slot: Int) {
         guard sceneDeck.indices.contains(slot) else { return }
         sceneDeck[slot] = makeSceneSnapshot(name: "Scene \(slot + 1)")
+        activeSceneSlot = slot
+        queuedSceneSlot = queuedSceneSlot == slot ? nil : queuedSceneSlot
         status = "Saved Scene \(slot + 1)"
+    }
+
+    func clearScene(slot: Int) {
+        guard sceneDeck.indices.contains(slot) else { return }
+        sceneDeck[slot] = nil
+        if activeSceneSlot == slot {
+            activeSceneSlot = nil
+        }
+        if queuedSceneSlot == slot {
+            queuedSceneSlot = nil
+        }
+        repairSceneMorphEndpoints()
+        status = "Cleared Scene \(slot + 1)"
+    }
+
+    func cancelQueuedScene() {
+        guard let slot = queuedSceneSlot else { return }
+        queuedSceneSlot = nil
+        status = "Canceled Scene \(slot + 1) launch"
     }
 
     func recallScene(slot: Int) {
@@ -1138,6 +1204,7 @@ final class AppModel: ObservableObject {
         cameraMirror = scene.cameraMirror
         photonDirectorEnabled = false
         queuedSceneSlot = nil
+        activeSceneSlot = slot
         sceneCutTime = Date().timeIntervalSinceReferenceDate
         status = "Launched Scene \(slot + 1)"
     }
@@ -1163,14 +1230,47 @@ final class AppModel: ObservableObject {
             sceneDeck.indices.contains(sceneMorphFromSlot),
             sceneDeck.indices.contains(sceneMorphToSlot),
             let from = sceneDeck[sceneMorphFromSlot],
-            let to = sceneDeck[sceneMorphToSlot]
+            let to = sceneDeck[sceneMorphToSlot],
+            sceneMorphFromSlot != sceneMorphToSlot
         else {
-            status = "Save scenes in both morph slots first"
+            status = "Choose two saved scene slots before morphing"
             return
         }
 
         applySceneMorph(from: from, to: to, amount: sceneMorphAmount)
+        activeSceneSlot = nil
         status = "Morphed Scene \(sceneMorphFromSlot + 1) -> \(sceneMorphToSlot + 1) \(Int(sceneMorphAmount * 100))%"
+    }
+
+    func setSceneMorphEndpoint(_ endpoint: Int, slot: Int) {
+        guard sceneDeck.indices.contains(slot) else { return }
+
+        if endpoint == 0 {
+            sceneMorphFromSlot = slot
+        } else {
+            sceneMorphToSlot = slot
+        }
+
+        guard sceneDeck[slot] != nil else {
+            sceneMorphAmount = 0.0
+            status = "Save Scene \(slot + 1) before morphing"
+            return
+        }
+
+        if endpoint == 0 {
+            if sceneMorphToSlot == slot {
+                sceneMorphToSlot = fallbackMorphSlot(excluding: slot) ?? sceneMorphToSlot
+            }
+        } else {
+            if sceneMorphFromSlot == slot {
+                sceneMorphFromSlot = fallbackMorphSlot(excluding: slot) ?? sceneMorphFromSlot
+            }
+        }
+
+        if sceneMorphFromSlot == sceneMorphToSlot {
+            sceneMorphAmount = 0.0
+            status = "Choose two different scene slots before morphing"
+        }
     }
 
     func saveMorphEndpoint(_ endpoint: Int) {
@@ -1198,7 +1298,28 @@ final class AppModel: ObservableObject {
                 sceneDeck[slot] = makeSceneSnapshot(name: "Generated \(slot + 1)")
             }
         }
+        activeSceneSlot = sceneDeck.indices.last
+        queuedSceneSlot = nil
+        sceneMorphFromSlot = 0
+        sceneMorphToSlot = sceneDeck.indices.contains(1) ? 1 : 0
         status = "Generated 8-scene performance deck"
+    }
+
+    private func repairSceneMorphEndpoints() {
+        if sceneDeck.indices.contains(sceneMorphFromSlot), sceneDeck[sceneMorphFromSlot] != nil,
+           sceneDeck.indices.contains(sceneMorphToSlot), sceneDeck[sceneMorphToSlot] != nil,
+           sceneMorphFromSlot != sceneMorphToSlot {
+            return
+        }
+
+        let savedSlots = sceneDeck.indices.filter { sceneDeck[$0] != nil }
+        sceneMorphFromSlot = savedSlots.first ?? 0
+        sceneMorphToSlot = savedSlots.dropFirst().first ?? sceneMorphFromSlot
+        sceneMorphAmount = 0.0
+    }
+
+    private func fallbackMorphSlot(excluding slot: Int) -> Int? {
+        sceneDeck.indices.first { $0 != slot && sceneDeck[$0] != nil }
     }
 
     func applyProductionSafeOutput() {
