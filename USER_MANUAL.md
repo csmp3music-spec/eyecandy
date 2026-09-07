@@ -199,6 +199,18 @@ The post-2000 glitch modes are playable approximations of underground VJ and gli
 
 The Feedback / Camera panel captures a live camera feed and composites it over the generated visuals. Pointing the camera at the screen creates physical optical feedback. The Camera Source menu chooses a specific AVFoundation video device by stable device ID, and Refresh rescans built-in and external cameras when a USB capture device or webcam is connected during a set. Feedback modes include Optical Screen Loop, Echo Tunnel, Slit Echo, Luma Key Overlay, and Chroma Wash. Camera Opacity, Feedback Depth, Feedback Scale, Feedback Rotation, Luma Threshold, Chroma Shift, and Mirror Camera control how strongly the captured image folds back into the light-synth output.
 
+The Procedural Feedback Simulator creates video-feedback looks without requiring a camera. Modes include Optical Tunnel, Prism Hall, Luma Bloom Memory, Chroma Warp Field, Scanline Memory, Mirror Labyrinth, CRT Camera Loop, Glass Monitor Stack, Tape Head Echo, Surveillance Wall, and Feedback Lab. The realistic modes emulate monitor curvature, phosphor masks, camera-to-screen recursion, glass reflections, tracking noise, tape dropouts, head-switching bands, and multi-monitor surveillance delay. The simulator uses the same controls for decay, recursive zoom, twist, displacement, prism split, and audio-reactive response in both live view and MP4 export.
+
+### Audio Visualizer
+
+The audio visualizer offers Spectrum Tunnel, Oscilloscope Garden, Chroma Vectorscope, Spectral Particles, Feedback Waveform, Spectral Lattice, Phase Bloom, Polyphonic Loom, Sequencer Matrix, Harmonic Orbits, Granular Bloom, and Hyper Analyzer. Polyphonic Loom maps the six sequence lanes into woven wave threads; Sequencer Matrix exposes the active step and pattern velocity; Harmonic Orbits maps the selected scale to rotating pitch nodes; and Granular Bloom uses transient-driven grains. The Synth button configures Polyphonic Loom for a safe, performance-ready synth view. Analyzer modes render in both the live canvas and MP4 exports.
+
+### GPU Effects
+
+Visual Output includes a GPU effects selector. Metal GPU is the normal realtime compositor and adds scanline, ring, feedback, and grain effects on top of the primary visualizer without changing recording output. OpenGL Legacy is a compatibility fallback for older plug-in and display workflows; macOS deprecates OpenGL, so use Metal GPU for current hardware. Canvas Only disables the realtime GPU overlay.
+
+Metal program chooses the realtime shader: Intro Fade creates a looping radial fade-in/out, Dissolve Portal cuts a moving noise field into a glowing portal edge, Psychedelic Plasma creates beat-reactive kaleidoscopic interference, Fractal Bloom adds an orbit-trap fractal field, and Feedback Cathedral builds a recursive architectural tunnel. Metal effect intensity and speed are independent from the base visualizer and are safe to automate during a performance.
+
 ### Video Performance Presets
 
 Output includes video performance presets that apply an engine, Minter mode, demoscene layer, palette, experimental video mode, recording resolution, and frame rate together.

@@ -444,12 +444,27 @@ struct ContentView: View {
                 }
                 HStack {
                     Button("Max") { model.applyVisualizerMax() }
+                    Button("Synth") { model.applyVisualizerSynth() }
                     Button("Focus") { model.applyVisualizerFocus() }
                 }
                 .controlSize(.small)
             }
 
             panelCard("Visual Output", systemImage: "sun.max") {
+                Picker("GPU effects", selection: $model.gpuVisualizerBackend) {
+                    ForEach(GPUVisualizerBackend.allCases) { backend in
+                        Text(backend.rawValue).tag(backend)
+                    }
+                }
+                .pickerStyle(.menu)
+                Picker("Metal program", selection: $model.metalVisualizerEffectMode) {
+                    ForEach(MetalVisualizerEffectMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Slider(value: $model.metalVisualizerEffectIntensity, in: 0...1) { Text("Metal effect intensity") }
+                Slider(value: $model.metalVisualizerEffectSpeed, in: 0.1...2.5) { Text("Metal effect speed") }
                 Slider(value: $model.lightSynthIntensity, in: 0...1) { Text("Synth intensity") }
                 Slider(value: $model.experimentalVideoIntensity, in: 0...1) { Text("Video intensity") }
                 Slider(value: $model.bloom, in: 0...1) { Text("Bloom") }

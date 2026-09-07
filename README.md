@@ -9,10 +9,10 @@ Current rebuilt features:
 - Dropdown inspector navigation for presets, sequencer, synth, drums, keyboard, light synth, feedback/camera, performance, broadcast, and output.
 - New default `Studio` dashboard that brings transport, quantized scene launch, live scene deck recall, bus mixer, and visual output safety into one performance view.
 - Inspector workflow improvements: quick panel jump buttons, compact live status strip, searchable visual presets, and an always-visible AppKit-backed vertical scrollbar for long control panels.
-- Audio-reactive analyzer visualizer modes: Spectrum Tunnel, Oscilloscope Garden, Chroma Vectorscope, Spectral Particles, and Hyper Analyzer.
-- Expanded analyzer modes: Feedback Waveform, Spectral Lattice, and Phase Bloom for MilkDrop-style wave/mesh/bloom responses.
+- Audio-reactive analyzer visualizer modes: Spectrum Tunnel, Oscilloscope Garden, Chroma Vectorscope, Spectral Particles, Feedback Waveform, Spectral Lattice, Phase Bloom, Polyphonic Loom, Sequencer Matrix, Harmonic Orbits, Granular Bloom, and Hyper Analyzer.
+- Synth visualizer modes turn sequencer steps, scale degrees, note velocity, spectral energy, and transients into playable threads, matrices, orbits, and granular blooms. Every analyzer mode is included in MP4 export.
 - Live analyzer metrics for bass, mid, high, transient/flux, spectral centroid, and stereo balance drive the visualizer layers instead of relying only on beat timing.
-- SwiftUI TimelineView/Canvas renderer with beat-reactive symmetry, tunnels, rings, demoscene scan lines, and modulation.
+- Metal GPU compositor over the SwiftUI TimelineView/Canvas renderer, with procedural scanlines, chromatic rings, feedback ripples, and grain that react to live analyzer data. Metal programs include Intro Fade, Dissolve Portal, Psychedelic Plasma, Fractal Bloom, and Feedback Cathedral. A selectable OpenGL legacy backend remains available for compatibility testing.
 - Jeff Minter-inspired neon grid, orbiting light-synth, and arcade vortex overlays.
 - Modernized Minter core modes inspired by Psychedelia, Colourspace, VLM/Neon, Tempest/TxK-style vector webs, Space Giraffe, Polybius tunnels, Gridrunner lattices, Neon Loopz, and LlamaTron trails.
 - Holographic scan-volume, chroma-depth, interference, Pepper Ghost stage, light-field volume, CGH speckle, and realistic-stack overlays.
@@ -55,7 +55,7 @@ Current rebuilt features:
 - Facebook Live safe setup: RTMPS port 443, 720p30, H.264 Main profile, 2-second keyframes, AAC-LC stereo, yuv420p/BT.709, stream URL normalization, and expanded ffmpeg connection diagnostics.
 - Broadcast stereo desktop-mix audio through a named AVFoundation audio device such as `BlackHole 2ch`, with silent fallback, Facebook-safe AAC settings, and ffmpeg error reporting in app status.
 - Camera input overlay for optical video feedback with selectable AVFoundation camera source, refresh, mirror, luma/chroma, and depth controls.
-- Procedural video feedback simulator with Optical Tunnel, Prism Hall, Luma Bloom Memory, Chroma Warp Field, Scanline Memory, Mirror Labyrinth, and Feedback Lab modes, including decay, zoom, twist, displacement, prism split, and audio-reactive controls in live view and MP4 export.
+- Procedural video feedback simulator with Optical Tunnel, Prism Hall, Luma Bloom Memory, Chroma Warp Field, Scanline Memory, Mirror Labyrinth, CRT Camera Loop, Glass Monitor Stack, Tape Head Echo, Surveillance Wall, and Feedback Lab modes, including decay, zoom, twist, displacement, prism split, and audio-reactive controls in live view and MP4 export.
 
 Run locally:
 

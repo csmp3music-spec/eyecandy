@@ -29,6 +29,10 @@ final class AppModel: ObservableObject {
     @Published var audioVisualizerIntensity = 0.72
     @Published var audioVisualizerDetail = 0.66
     @Published var audioVisualizerPersistence = 0.48
+    @Published var gpuVisualizerBackend: GPUVisualizerBackend = .metal
+    @Published var metalVisualizerEffectMode: MetalVisualizerEffectMode = .psychedelicPlasma
+    @Published var metalVisualizerEffectIntensity = 0.68
+    @Published var metalVisualizerEffectSpeed = 0.72
     @Published var macroX = 0.58
     @Published var macroY = 0.64
     @Published var photonDirectorEnabled = true
@@ -264,19 +268,19 @@ final class AppModel: ObservableObject {
     private func feedbackSimulatorMode(for videoMode: ExperimentalVideoMode, seed: Int) -> FeedbackSimulatorMode {
         switch videoMode {
         case .videoFeedback, .recursiveMirror:
-            return .opticalTunnel
+            return seed.isMultiple(of: 2) ? .crtCameraLoop : .glassMonitorStack
         case .chromaticAberration, .rgbDelay, .chromaInvert, .chromaLightLeaks:
-            return .prismHall
+            return seed.isMultiple(of: 3) ? .glassMonitorStack : .prismHall
         case .lumaKeyBloom, .solarizedContours, .phosphorBurn:
-            return .lumaBloomMemory
+            return seed.isMultiple(of: 2) ? .crtCameraLoop : .lumaBloomMemory
         case .liquidLens, .opticalFlowSmear, .datamoshBlocks, .codecTear, .pixelSortTrails:
-            return .chromaWarpField
+            return seed.isMultiple(of: 2) ? .tapeHeadEcho : .chromaWarpField
         case .slitScan, .scanGate, .vhsMelt, .halftonePosterize:
-            return .scanlineMemory
+            return seed.isMultiple(of: 3) ? .surveillanceWall : .scanlineMemory
         case .kaleidoFeedback, .tunnelFold, .demosceneStack, .vectorScope, .oscillatorBank:
             return .mirrorLabyrinth
         case .clean, .colourspace, .neonPulse, .edgeTrace:
-            let modes: [FeedbackSimulatorMode] = [.opticalTunnel, .prismHall, .lumaBloomMemory, .chromaWarpField, .scanlineMemory, .mirrorLabyrinth, .feedbackLab]
+            let modes: [FeedbackSimulatorMode] = [.opticalTunnel, .prismHall, .lumaBloomMemory, .chromaWarpField, .scanlineMemory, .mirrorLabyrinth, .crtCameraLoop, .glassMonitorStack, .tapeHeadEcho, .surveillanceWall, .feedbackLab]
             return modes[abs(seed) % modes.count]
         }
     }
@@ -1373,6 +1377,17 @@ final class AppModel: ObservableObject {
         status = "Visualizer focus enabled"
     }
 
+    func applyVisualizerSynth() {
+        audioVisualizerMode = .polyphonicLoom
+        audioVisualizerIntensity = 0.78
+        audioVisualizerDetail = 0.72
+        audioVisualizerPersistence = 0.56
+        lightSynthIntensity = min(1.0, max(lightSynthIntensity, 0.68))
+        bloom = min(0.58, max(bloom, 0.36))
+        flashSafety = true
+        status = "Synth visualizer enabled"
+    }
+
     private func makeSceneSnapshot(name: String) -> LightSceneSnapshot {
         LightSceneSnapshot(
             name: name,
@@ -1531,6 +1546,10 @@ final class AppModel: ObservableObject {
             paletteMode: paletteMode,
             blendMode: blendMode,
             visualEngineMode: visualEngineMode,
+            audioVisualizerMode: audioVisualizerMode,
+            audioVisualizerIntensity: audioVisualizerIntensity,
+            audioVisualizerDetail: audioVisualizerDetail,
+            audioVisualizerPersistence: audioVisualizerPersistence,
             experimentalVideoMode: experimentalVideoMode,
             experimentalVideoIntensity: experimentalVideoIntensity,
             videoKeyThreshold: videoKeyThreshold,

@@ -116,9 +116,43 @@ enum AudioVisualizerMode: String, CaseIterable, Identifiable {
     case feedbackWaveform = "Feedback Waveform"
     case spectralLattice = "Spectral Lattice"
     case phaseBloom = "Phase Bloom"
+    case polyphonicLoom = "Polyphonic Loom"
+    case sequencerMatrix = "Sequencer Matrix"
+    case harmonicOrbits = "Harmonic Orbits"
+    case granularBloom = "Granular Bloom"
     case hyperAnalyzer = "Hyper Analyzer"
 
     var id: String { rawValue }
+}
+
+enum GPUVisualizerBackend: String, CaseIterable, Identifiable {
+    case metal = "Metal GPU"
+    case openGL = "OpenGL Legacy"
+    case canvasOnly = "Canvas Only"
+
+    var id: String { rawValue }
+}
+
+enum MetalVisualizerEffectMode: String, CaseIterable, Identifiable {
+    case analyzer = "Analyzer Overlay"
+    case introFade = "Intro Fade"
+    case dissolvePortal = "Dissolve Portal"
+    case psychedelicPlasma = "Psychedelic Plasma"
+    case fractalBloom = "Fractal Bloom"
+    case feedbackCathedral = "Feedback Cathedral"
+
+    var id: String { rawValue }
+
+    var shaderIndex: Float {
+        switch self {
+        case .analyzer: return 0
+        case .introFade: return 1
+        case .dissolvePortal: return 2
+        case .psychedelicPlasma: return 3
+        case .fractalBloom: return 4
+        case .feedbackCathedral: return 5
+        }
+    }
 }
 
 enum LightPaletteMode: String, CaseIterable, Identifiable {
@@ -265,6 +299,10 @@ enum FeedbackSimulatorMode: String, CaseIterable, Identifiable, Hashable {
     case chromaWarpField = "Chroma Warp Field"
     case scanlineMemory = "Scanline Memory"
     case mirrorLabyrinth = "Mirror Labyrinth"
+    case crtCameraLoop = "CRT Camera Loop"
+    case glassMonitorStack = "Glass Monitor Stack"
+    case tapeHeadEcho = "Tape Head Echo"
+    case surveillanceWall = "Surveillance Wall"
     case feedbackLab = "Feedback Lab"
 
     var id: String { rawValue }
