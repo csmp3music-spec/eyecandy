@@ -28,6 +28,9 @@ struct MP4RecordingRequest {
     var audioVisualizerIntensity: Double
     var audioVisualizerDetail: Double
     var audioVisualizerPersistence: Double
+    var psychedelicFieldMode: PsychedelicFieldMode
+    var psychedelicFieldIntensity: Double
+    var psychedelicFieldMotion: Double
     var experimentalVideoMode: ExperimentalVideoMode
     var experimentalVideoIntensity: Double
     var videoKeyThreshold: Double
@@ -93,6 +96,9 @@ extension MP4RecordingRequest {
         audioVisualizerIntensity: 0.72,
         audioVisualizerDetail: 0.66,
         audioVisualizerPersistence: 0.48,
+        psychedelicFieldMode: .everything,
+        psychedelicFieldIntensity: 0.82,
+        psychedelicFieldMotion: 0.78,
         experimentalVideoMode: .clean,
         experimentalVideoIntensity: 0.55,
         videoKeyThreshold: 0.52,
@@ -272,6 +278,7 @@ enum MP4Recorder {
         drawMinterLayer(context, size: size, request: request, time: t, beat: beat)
         drawHolographicLayer(context, size: size, request: request, time: t, beat: beat)
         drawPaletteAndGate(context, size: size, request: request, time: t)
+        drawPsychedelicField(context, size: size, request: request, time: t, beat: beat)
         drawExperimentalVideoMode(context, size: size, request: request, time: t, beat: beat)
         drawFeedbackSimulatorLayer(context, size: size, request: request, time: t, beat: beat)
         drawCameraFeedbackOverlay(context, size: size, request: request, time: t)
@@ -1090,6 +1097,67 @@ enum MP4Recorder {
         if phase < 0.08 {
             context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: (request.flashSafety ? 0.22 : 0.55) * request.lightSynthIntensity))
             context.fill(CGRect(origin: .zero, size: size))
+        }
+    }
+
+    private static func drawPsychedelicField(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double) {
+        guard request.psychedelicFieldMode != .off, request.psychedelicFieldIntensity > 0.01 else { return }
+        let intensity = request.flashSafety ? min(request.psychedelicFieldIntensity, 0.88) : request.psychedelicFieldIntensity
+        let motion = request.psychedelicFieldMotion
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let center = CGPoint(x: size.width * (0.5 + (request.macroX - 0.5) * 0.22), y: size.height * (0.5 + (0.5 - request.macroY) * 0.18))
+        let shortest = min(size.width, size.height)
+        let hueTime = time * (0.08 + motion * 0.22)
+        context.setBlendMode(.plusLighter)
+        context.setFillColor(neonColor(hueTime + request.macroX * 0.24, alpha: intensity * (0.040 + energy * 0.055)))
+        context.fill(CGRect(origin: .zero, size: size))
+
+        if request.psychedelicFieldMode == .chromaFlood || request.psychedelicFieldMode == .everything {
+            let blooms = 8 + Int(motion * 8)
+            for bloom in 0..<blooms {
+                let t = Double(bloom) / Double(max(1, blooms - 1))
+                let x = size.width * (0.5 + sin(hueTime * 1.7 + t * 8.0) * (0.16 + t * 0.30))
+                let y = size.height * (0.5 + cos(hueTime * 1.3 + t * 6.0) * (0.12 + (1.0 - t) * 0.26))
+                let radius = shortest * (0.11 + 0.16 * abs(sin(hueTime + t * 7.0)) + energy * 0.08)
+                context.setFillColor(neonColor(t + hueTime, alpha: intensity * (0.022 + energy * 0.034)))
+                context.fillEllipse(in: CGRect(x: x - radius * 1.42, y: y - radius, width: radius * 2.84, height: radius * 2))
+            }
+        }
+
+        if request.psychedelicFieldMode == .prismStorm || request.psychedelicFieldMode == .everything {
+            let rays = 32 + Int(motion * 40)
+            for ray in 0..<rays {
+                let t = Double(ray) / Double(rays)
+                let angle = t * .pi * 2.0 + hueTime * (0.7 + energy * 1.6)
+                let inner = shortest * (0.04 + beat * 0.04)
+                let outer = shortest * (0.42 + 0.28 * abs(sin(hueTime * 0.7 + t * 9.0)) + energy * 0.18)
+                let bend = sin(hueTime + t * 12.0) * 0.08
+                context.setStrokeColor(neonColor(t + hueTime * 0.6, alpha: intensity * (0.028 + energy * 0.050)))
+                context.setLineWidth(1.0 + energy * 3.6)
+                context.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
+                context.addLine(to: CGPoint(x: center.x + cos(angle + bend) * outer, y: center.y + sin(angle + bend) * outer))
+                context.strokePath()
+            }
+        }
+
+        if request.psychedelicFieldMode == .liquidFractal || request.psychedelicFieldMode == .everything {
+            let contours = 8 + Int(motion * 10)
+            for contour in 0..<contours {
+                let t = Double(contour) / Double(max(1, contours - 1))
+                let baseRadius = shortest * (0.08 + t * (0.40 + energy * 0.20))
+                let path = CGMutablePath()
+                for point in 0...144 {
+                    let u = Double(point) / 144.0 * .pi * 2.0
+                    let swirl = sin(u * (3.0 + motion * 5.0) + hueTime * 4.0) * (0.10 + energy * 0.11) + sin(u * 7.0 - hueTime * 2.7) * 0.055
+                    let radius = baseRadius * (1.0 + swirl) + sin(u * 11.0 + hueTime * 3.0) * shortest * 0.016
+                    let p = CGPoint(x: center.x + cos(u + t * 1.8 + hueTime * 0.4) * radius, y: center.y + sin(u + t * 1.8 + hueTime * 0.4) * radius * (0.62 + request.macroY * 0.28))
+                    if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                context.setStrokeColor(neonColor(t * 0.72 + hueTime, alpha: intensity * (0.035 + (1.0 - t) * 0.055)))
+                context.setLineWidth(0.8 + energy * 2.8)
+                context.addPath(path)
+                context.strokePath()
+            }
         }
     }
 

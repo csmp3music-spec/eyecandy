@@ -465,6 +465,14 @@ struct ContentView: View {
                 .pickerStyle(.menu)
                 Slider(value: $model.metalVisualizerEffectIntensity, in: 0...1) { Text("Metal effect intensity") }
                 Slider(value: $model.metalVisualizerEffectSpeed, in: 0.1...2.5) { Text("Metal effect speed") }
+                Picker("Psychedelic field", selection: $model.psychedelicFieldMode) {
+                    ForEach(PsychedelicFieldMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Slider(value: $model.psychedelicFieldIntensity, in: 0...1) { Text("Psychedelic intensity") }
+                Slider(value: $model.psychedelicFieldMotion, in: 0.1...2.5) { Text("Psychedelic motion") }
                 Slider(value: $model.lightSynthIntensity, in: 0...1) { Text("Synth intensity") }
                 Slider(value: $model.experimentalVideoIntensity, in: 0...1) { Text("Video intensity") }
                 Slider(value: $model.bloom, in: 0...1) { Text("Bloom") }
@@ -1226,6 +1234,17 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.menu)
+
+                HStack {
+                    Button("4K Master") { model.apply4KMasterOutput() }
+                    Button("Vertical 4K") { model.applyVertical4KMasterOutput() }
+                }
+                .controlSize(.small)
+
+                let recordingSize = model.recordingResolution.size
+                Text("Capture: \(recordingSize.width) x \(recordingSize.height) at \(model.recordingFPS) fps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
 
                 TextField("Search performance presets", text: $model.performancePresetFilter)
                     .textFieldStyle(.roundedBorder)

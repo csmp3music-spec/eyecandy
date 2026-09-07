@@ -155,6 +155,16 @@ enum MetalVisualizerEffectMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum PsychedelicFieldMode: String, CaseIterable, Identifiable {
+    case off = "Off"
+    case chromaFlood = "Chroma Flood"
+    case prismStorm = "Prism Storm"
+    case liquidFractal = "Liquid Fractal"
+    case everything = "Full Spectrum"
+
+    var id: String { rawValue }
+}
+
 enum LightPaletteMode: String, CaseIterable, Identifiable {
     case neon = "Neon"
     case colourspace = "Colourspace"

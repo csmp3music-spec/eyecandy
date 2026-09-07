@@ -69,6 +69,7 @@ struct RendererView: View {
         drawMinterLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawHolographicLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawPaletteAndGate(context: &context, size: size, time: time, preset: preset)
+        drawPsychedelicField(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawExperimentalVideoMode(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawFeedbackSimulatorLayer(context: &context, size: size, time: time, preset: preset, beat: beat)
         drawCameraFeedbackOverlay(context: &context, size: size, time: time)
@@ -1064,6 +1065,64 @@ struct RendererView: View {
         if phase < 0.08 {
             let alpha = model.flashSafety ? 0.22 : 0.55
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white.opacity(alpha * model.lightSynthIntensity)))
+        }
+    }
+
+    private func drawPsychedelicField(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double) {
+        guard model.psychedelicFieldMode != .off, model.psychedelicFieldIntensity > 0.01 else { return }
+        let intensity = model.flashSafety ? min(model.psychedelicFieldIntensity, 0.88) : model.psychedelicFieldIntensity
+        let motion = model.psychedelicFieldMotion
+        let energy = min(1.0, model.audioMeter.bass * 0.38 + model.audioMeter.mid * 0.24 + model.audioMeter.treble * 0.18 + model.audioMeter.spectralFlux * 0.36 + model.audioMeter.transient * 0.28)
+        let center = CGPoint(x: size.width * (0.5 + (model.macroX - 0.5) * 0.22), y: size.height * (0.5 + (0.5 - model.macroY) * 0.18))
+        let shortest = min(size.width, size.height)
+        var layer = context
+        layer.blendMode = .plusLighter
+        let hueTime = time * (0.08 + motion * 0.22)
+
+        layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.hsba(hueTime + model.macroX * 0.24, 0.92, 1.0).opacity(intensity * (0.040 + energy * 0.055))))
+
+        if model.psychedelicFieldMode == .chromaFlood || model.psychedelicFieldMode == .everything {
+            let blooms = 8 + Int(motion * 8)
+            for bloom in 0..<blooms {
+                let t = Double(bloom) / Double(max(1, blooms - 1))
+                let x = size.width * (0.5 + sin(hueTime * 1.7 + t * 8.0) * (0.16 + t * 0.30))
+                let y = size.height * (0.5 + cos(hueTime * 1.3 + t * 6.0) * (0.12 + (1.0 - t) * 0.26))
+                let radius = shortest * (0.11 + 0.16 * abs(sin(hueTime + t * 7.0)) + energy * 0.08)
+                layer.fill(Path(ellipseIn: CGRect(x: x - radius * 1.42, y: y - radius, width: radius * 2.84, height: radius * 2)), with: .color(Color.hsba(t + hueTime, 0.94, 1.0).opacity(intensity * (0.022 + energy * 0.034))))
+            }
+        }
+
+        if model.psychedelicFieldMode == .prismStorm || model.psychedelicFieldMode == .everything {
+            let rays = 32 + Int(motion * 40)
+            for ray in 0..<rays {
+                let t = Double(ray) / Double(rays)
+                let angle = t * .pi * 2.0 + hueTime * (0.7 + energy * 1.6)
+                let inner = shortest * (0.04 + beat * 0.04)
+                let outer = shortest * (0.42 + 0.28 * abs(sin(hueTime * 0.7 + t * 9.0)) + energy * 0.18)
+                var beam = Path()
+                beam.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
+                beam.addLine(to: CGPoint(x: center.x + cos(angle + sin(hueTime + t * 12.0) * 0.08) * outer, y: center.y + sin(angle + sin(hueTime + t * 12.0) * 0.08) * outer))
+                layer.stroke(beam, with: .color(Color.hsba(t + hueTime * 0.6, 0.90, 1.0).opacity(intensity * (0.028 + energy * 0.050))), lineWidth: 1.0 + model.audioMeter.treble * 3.6)
+            }
+        }
+
+        if model.psychedelicFieldMode == .liquidFractal || model.psychedelicFieldMode == .everything {
+            let contours = 8 + Int(motion * 10)
+            let points = 144
+            for contour in 0..<contours {
+                let t = Double(contour) / Double(max(1, contours - 1))
+                let baseRadius = shortest * (0.08 + t * (0.40 + energy * 0.20))
+                var path = Path()
+                for point in 0...points {
+                    let u = Double(point) / Double(points) * .pi * 2.0
+                    let swirl = sin(u * (3.0 + motion * 5.0) + hueTime * 4.0) * (0.10 + energy * 0.11)
+                        + sin(u * (7.0 + model.audioMeter.treble * 7.0) - hueTime * 2.7) * 0.055
+                    let radius = baseRadius * (1.0 + swirl) + sin(u * 11.0 + hueTime * 3.0) * shortest * 0.016
+                    let p = CGPoint(x: center.x + cos(u + t * 1.8 + hueTime * 0.4) * radius, y: center.y + sin(u + t * 1.8 + hueTime * 0.4) * radius * (0.62 + model.macroY * 0.28))
+                    if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                layer.stroke(path, with: .color(Color.hsba(t * 0.72 + hueTime, 0.94, 1.0).opacity(intensity * (0.035 + (1.0 - t) * 0.055))), lineWidth: 0.8 + energy * 2.8)
+            }
         }
     }
 

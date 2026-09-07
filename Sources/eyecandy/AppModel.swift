@@ -33,6 +33,9 @@ final class AppModel: ObservableObject {
     @Published var metalVisualizerEffectMode: MetalVisualizerEffectMode = .psychedelicPlasma
     @Published var metalVisualizerEffectIntensity = 0.68
     @Published var metalVisualizerEffectSpeed = 0.72
+    @Published var psychedelicFieldMode: PsychedelicFieldMode = .everything
+    @Published var psychedelicFieldIntensity = 0.82
+    @Published var psychedelicFieldMotion = 0.78
     @Published var macroX = 0.58
     @Published var macroY = 0.64
     @Published var photonDirectorEnabled = true
@@ -1388,6 +1391,26 @@ final class AppModel: ObservableObject {
         status = "Synth visualizer enabled"
     }
 
+    func apply4KMasterOutput() {
+        recordingResolution = .fourK
+        recordingFPS = 30
+        psychedelicFieldMode = .everything
+        psychedelicFieldIntensity = max(psychedelicFieldIntensity, 0.86)
+        psychedelicFieldMotion = max(psychedelicFieldMotion, 0.84)
+        visualOutputGain = min(0.94, max(visualOutputGain, 0.84))
+        status = "4K master output configured"
+    }
+
+    func applyVertical4KMasterOutput() {
+        recordingResolution = .vertical4K
+        recordingFPS = 30
+        psychedelicFieldMode = .everything
+        psychedelicFieldIntensity = max(psychedelicFieldIntensity, 0.86)
+        psychedelicFieldMotion = max(psychedelicFieldMotion, 0.84)
+        visualOutputGain = min(0.94, max(visualOutputGain, 0.84))
+        status = "Vertical 4K master output configured"
+    }
+
     private func makeSceneSnapshot(name: String) -> LightSceneSnapshot {
         LightSceneSnapshot(
             name: name,
@@ -1550,6 +1573,9 @@ final class AppModel: ObservableObject {
             audioVisualizerIntensity: audioVisualizerIntensity,
             audioVisualizerDetail: audioVisualizerDetail,
             audioVisualizerPersistence: audioVisualizerPersistence,
+            psychedelicFieldMode: psychedelicFieldMode,
+            psychedelicFieldIntensity: psychedelicFieldIntensity,
+            psychedelicFieldMotion: psychedelicFieldMotion,
             experimentalVideoMode: experimentalVideoMode,
             experimentalVideoIntensity: experimentalVideoIntensity,
             videoKeyThreshold: videoKeyThreshold,
