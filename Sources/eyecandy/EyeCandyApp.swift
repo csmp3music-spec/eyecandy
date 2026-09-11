@@ -28,7 +28,7 @@ struct EyeCandyApp: App {
                     paletteMode: .neon,
                     blendMode: .additive,
                     visualEngineMode: .engineAutopilot,
-                    audioVisualizerMode: .hyperAnalyzer,
+                    audioVisualizerMode: .psychedelicKaleidoscope,
                     audioVisualizerIntensity: 0.76,
                     audioVisualizerDetail: 0.72,
                     audioVisualizerPersistence: 0.58,

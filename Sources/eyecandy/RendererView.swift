@@ -654,6 +654,14 @@ struct RendererView: View {
             drawGranularBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity)
         case .spectralConductor:
             drawSpectralConductorVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .neonPulseScope:
+            drawNeonPulseScopeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .laserSpectrogram:
+            drawLaserSpectrogramVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .psychedelicKaleidoscope:
+            drawPsychedelicKaleidoscopeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
+        case .vocalPrism:
+            drawVocalPrismVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
         case .hyperAnalyzer:
             drawSpectrumTunnel(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.72)
             drawOscilloscopeGarden(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.58, beat: beat)
@@ -667,6 +675,10 @@ struct RendererView: View {
             drawHarmonicOrbitsVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.32, beat: beat)
             drawGranularBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.30)
             drawSpectralConductorVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.34, beat: beat)
+            drawNeonPulseScopeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.30, beat: beat)
+            drawLaserSpectrogramVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.28, beat: beat)
+            drawPsychedelicKaleidoscopeVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.24, beat: beat)
+            drawVocalPrismVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.22, beat: beat)
         }
     }
 
@@ -978,6 +990,145 @@ struct RendererView: View {
         pointer.move(to: center)
         pointer.addLine(to: CGPoint(x: center.x + cos(markerAngle) * markerRadius, y: center.y + sin(markerAngle) * markerRadius * 0.64))
         context.stroke(pointer, with: .color(.white.opacity(intensity * (0.12 + model.audioMeter.transient * 0.32))), lineWidth: 1.0 + model.audioMeter.bass * 4.0)
+    }
+
+    private func drawNeonPulseScopeVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let meter = model.audioMeter
+        let scale = min(1.6, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let lanes = 4 + Int(model.audioVisualizerDetail * 6.0 * scale)
+        let points = 180 + Int(120.0 * scale)
+        var layer = context
+        layer.blendMode = .plusLighter
+
+        for lane in 0..<lanes {
+            let laneT = Double(lane) / Double(max(1, lanes - 1))
+            let baseline = size.height * (0.14 + laneT * 0.72)
+            let amplitude = size.height * (0.025 + meter.bass * 0.075 + meter.mid * 0.045 + meter.transient * 0.055)
+            var path = Path()
+            for point in 0...points {
+                let u = Double(point) / Double(points)
+                let carrier = sin(u * .pi * (3.0 + laneT * 14.0) + time * (1.8 + meter.spectralCentroid * 4.0))
+                let modulator = sin(u * .pi * (19.0 + model.audioVisualizerDetail * 26.0) - time * (1.0 + meter.treble * 7.0))
+                let kick = sin(beat * .pi * 2.0 + laneT * 5.2) * meter.rhythmicPulse
+                let y = baseline + (carrier * 0.66 + modulator * 0.24 + kick * 0.36) * amplitude
+                if point == 0 { path.move(to: CGPoint(x: u * size.width, y: y)) } else { path.addLine(to: CGPoint(x: u * size.width, y: y)) }
+            }
+            let hue = laneT + time * 0.03 + meter.spectralCentroid * 0.24
+            layer.stroke(path, with: .color(Color.hsba(hue, 0.94, 1.0).opacity(intensity * (0.12 + meter.mid * 0.20))), lineWidth: 1.0 + meter.treble * 3.2 + meter.transient * 2.4)
+        }
+    }
+
+    private func drawLaserSpectrogramVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let scale = min(1.8, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let columns = 52 + Int(model.audioVisualizerDetail * 110.0 * scale)
+        let rows = 12 + Int(model.audioVisualizerDetail * 20.0)
+        let cellWidth = size.width / Double(columns)
+        let cellHeight = size.height / Double(rows)
+        let sweep = (time * (0.12 + model.audioMeter.spectralFlux * 0.42)).truncatingRemainder(dividingBy: 1)
+        var layer = context
+        layer.blendMode = .plusLighter
+
+        for column in 0..<columns {
+            let xT = Double(column) / Double(max(1, columns - 1))
+            let band = spectrumBin(column, count: columns, time: time)
+            for row in 0..<rows {
+                let yT = Double(row) / Double(max(1, rows - 1))
+                let harmonic = sin((xT * 17.0 + yT * 9.0 + time * 1.4) * .pi)
+                let value = max(0, band * (1.0 - yT * 0.72) + harmonic * 0.14 + model.audioMeter.treble * yT * 0.22)
+                guard value > 0.18 else { continue }
+                let mirrorRow = rows - row - 1
+                let height = cellHeight * (0.58 + value * 0.72)
+                let x = Double(column) * cellWidth
+                let y = Double(row) * cellHeight
+                let alpha = intensity * (0.025 + value * 0.13) * (0.72 + model.audioMeter.rhythmicPulse * 0.28)
+                let color = Color.hsba(xT * 0.42 + yT * 0.34 + time * 0.035, 0.96, 1.0).opacity(alpha)
+                layer.fill(Path(CGRect(x: x, y: y, width: cellWidth + 0.8, height: height)), with: .color(color))
+                layer.fill(Path(CGRect(x: x, y: Double(mirrorRow) * cellHeight + cellHeight - height, width: cellWidth + 0.8, height: height)), with: .color(color))
+            }
+        }
+
+        let scanX = size.width * sweep
+        layer.fill(Path(CGRect(x: scanX - cellWidth * 1.5, y: 0, width: cellWidth * 3.0, height: size.height)), with: .color(.white.opacity(intensity * (0.025 + model.audioMeter.transient * 0.09 + sin(beat * .pi * 2.0) * 0.02))))
+    }
+
+    private func drawPsychedelicKaleidoscopeVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let meter = model.audioMeter
+        let scale = min(1.7, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let segments = 7 + Int(model.audioVisualizerDetail * 13.0)
+        let rings = 10 + Int(model.audioVisualizerDetail * 22.0 * scale)
+        let center = CGPoint(x: size.width * (0.5 + meter.stereoBalance * 0.08), y: size.height * 0.5)
+        let shortest = min(size.width, size.height)
+        let pulse = min(1.0, meter.rhythmicPulse + meter.transient * 0.5)
+        var layer = context
+        layer.blendMode = .plusLighter
+
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.05 + ringT * (0.48 + meter.bass * 0.13))
+            for segment in 0..<segments {
+                let segmentT = Double(segment) / Double(segments)
+                let baseAngle = segmentT * .pi * 2.0 + time * (0.16 + meter.spectralCentroid * 0.48) * (segment.isMultiple(of: 2) ? 1 : -1)
+                var petal = Path()
+                for point in 0...26 {
+                    let u = Double(point) / 26.0
+                    let angle = baseAngle + (u - 0.5) * .pi / Double(segments) * (1.2 + meter.mid * 1.4)
+                    let ripple = sin(u * .pi * (3.0 + meter.treble * 7.0) + time * 2.4 + ringT * 8.0) * shortest * (0.012 + pulse * 0.020)
+                    let r = radius + ripple + u * shortest * (0.018 + meter.harmonicEnergy * 0.025)
+                    let p = CGPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r * (0.58 + meter.mid * 0.28))
+                    if point == 0 { petal.move(to: p) } else { petal.addLine(to: p) }
+                }
+                let hue = segmentT + ringT * 0.46 + time * 0.035 + beat * 0.08
+                layer.stroke(petal, with: .color(Color.hsba(hue, 0.96, 1.0).opacity(intensity * (0.026 + (1.0 - ringT) * 0.075 + pulse * 0.055))), lineWidth: 0.7 + meter.treble * 2.8 + pulse * 1.8)
+            }
+        }
+    }
+
+    private func drawVocalPrismVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let meter = model.audioMeter
+        let vocal = min(1.0, meter.vocalEnvelope * model.vocoder.visualSend)
+        let presence = min(1.0, meter.vocalPresence * model.vocoder.visualSend)
+        let brightness = min(1.0, meter.vocalBrightness * model.vocoder.visualSend)
+        let energy = min(1.0, meter.harmonicEnergy * 0.52 + meter.rhythmicPulse * 0.28 + vocal * 0.62)
+        let center = CGPoint(x: size.width * (0.5 + meter.stereoBalance * 0.06), y: size.height * 0.5)
+        let shortest = min(size.width, size.height)
+        let rays = 12 + Int(model.audioVisualizerDetail * 36)
+        let rotation = time * (0.10 + brightness * 0.56) + beat * 0.18
+        var layer = context
+        layer.blendMode = .plusLighter
+
+        for ray in 0..<rays {
+            let rayT = Double(ray) / Double(rays)
+            let angle = rayT * .pi * 2.0 + rotation
+            let inner = shortest * (0.035 + vocal * 0.12 + sin(time * 1.8 + rayT * 13.0) * 0.014)
+            let outer = shortest * (0.18 + energy * 0.34 + presence * 0.14)
+            let width = shortest * (0.012 + brightness * 0.028 + (ray.isMultiple(of: 3) ? 0.012 : 0))
+            let perpendicular = CGVector(dx: -sin(angle) * width, dy: cos(angle) * width)
+            let start = CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner)
+            let end = CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer)
+            var prism = Path()
+            prism.move(to: CGPoint(x: start.x + perpendicular.dx, y: start.y + perpendicular.dy))
+            prism.addLine(to: CGPoint(x: end.x + perpendicular.dx * 0.22, y: end.y + perpendicular.dy * 0.22))
+            prism.addLine(to: CGPoint(x: end.x - perpendicular.dx * 0.22, y: end.y - perpendicular.dy * 0.22))
+            prism.addLine(to: CGPoint(x: start.x - perpendicular.dx, y: start.y - perpendicular.dy))
+            prism.closeSubpath()
+            let hue = rayT + time * 0.045 + brightness * 0.22
+            layer.fill(prism, with: .color(Color.hsba(hue, 0.94, 1.0).opacity(intensity * (0.025 + energy * 0.075 + vocal * 0.14))))
+        }
+
+        let rings = 3 + Int(model.audioVisualizerPersistence * 8)
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.07 + ringT * (0.28 + vocal * 0.20))
+            let yScale = 0.38 + brightness * 0.34 + ringT * 0.16
+            var orbit = Path()
+            for point in 0...96 {
+                let t = Double(point) / 96.0 * .pi * 2.0
+                let wobble = 1.0 + sin(t * (3.0 + presence * 10.0) + rotation * 2.0) * (0.04 + vocal * 0.16)
+                let p = CGPoint(x: center.x + cos(t + rotation) * radius * wobble, y: center.y + sin(t + rotation) * radius * yScale * wobble)
+                if point == 0 { orbit.move(to: p) } else { orbit.addLine(to: p) }
+            }
+            layer.stroke(orbit, with: .color(blendedColor(preset: preset, t: ringT + brightness * 0.3).opacity(intensity * (0.05 + vocal * 0.18 + energy * 0.10))), lineWidth: 0.8 + brightness * 3.2)
+        }
     }
 
     private func drawSpectralConductorVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {

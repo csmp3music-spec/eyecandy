@@ -24,6 +24,8 @@
   <true/>
   <key>NSCameraUsageDescription</key>
   <string>Camera input is used for live optical video feedback and visual overlays.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Microphone input shapes the live vocoder and vocal-responsive visualizer.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

@@ -51,6 +51,7 @@ struct ContentView: View {
         .onChange(of: model.sequencer) { _ in model.pushAudioState() }
         .onChange(of: model.bassVoice) { _ in model.pushAudioState() }
         .onChange(of: model.leadVoice) { _ in model.pushAudioState() }
+        .onChange(of: model.vocoder) { _ in model.pushAudioState() }
         .onChange(of: model.delaySettings) { _ in model.pushAudioState() }
         .onChange(of: model.mixer) { _ in model.pushAudioState() }
         .onChange(of: model.masterLevel) { _ in model.pushAudioState() }
@@ -137,6 +138,9 @@ struct ContentView: View {
             quickPanelButton(.synth, "Synth", "waveform")
             quickPanelButton(.performance, "Perf", "bolt.fill")
             quickPanelButton(.output, "Output", "slider.horizontal.3")
+            quickPanelButton(.drums, "Drums", "metronome")
+            quickPanelButton(.delayFX, "Delay", "repeat")
+            quickPanelButton(.keyboard, "Keys", "pianokeys")
         }
     }
 
@@ -775,8 +779,45 @@ struct ContentView: View {
             .pickerStyle(.segmented)
 
             synthVoiceControls(activeSynthVoice)
+
+            Divider()
+
+            vocoderPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var vocoderPanel: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("Mic Vocoder")
+                    .font(.headline)
+                Spacer()
+                Text("Voice \(Int(model.audioMeter.vocalEnvelope * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            Toggle("Enable microphone carrier", isOn: Binding(
+                get: { model.vocoder.enabled },
+                set: { model.setVocoderEnabled($0) }
+            ))
+
+            HStack {
+                Button("Vocal Prism") { model.applyVocoderPerformance() }
+                    .buttonStyle(.borderedProminent)
+                Spacer()
+                Text("No mic monitoring")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Stepper("Bands \(model.vocoder.bands)", value: $model.vocoder.bands, in: 4...24, step: 2)
+            synthSlider("Vocoder mix", value: $model.vocoder.mix)
+            synthSlider("Formant shift", value: $model.vocoder.formantShift)
+            synthSlider("Carrier drive", value: $model.vocoder.carrierDrive)
+            synthSlider("Visual send", value: $model.vocoder.visualSend)
+        }
     }
 
     private var delayFXPanel: some View {
@@ -1311,6 +1352,7 @@ struct ContentView: View {
                 HStack {
                     Button("4K Master") { model.apply4KMasterOutput() }
                     Button("Vertical 4K") { model.applyVertical4KMasterOutput() }
+                    Button("4K Psychedelic") { model.applyPsychedelic4KVisualizer() }
                 }
                 .controlSize(.small)
 

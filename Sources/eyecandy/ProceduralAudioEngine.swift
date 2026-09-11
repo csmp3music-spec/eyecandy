@@ -14,6 +14,7 @@ final class ProceduralAudioEngine {
         var stereoWidth = 0.62
         var limiterCeiling = 0.92
         var limiterRelease = 0.38
+        var vocoder = VocoderState()
     }
 
     private let engine = AVAudioEngine()
@@ -67,6 +68,10 @@ final class ProceduralAudioEngine {
     private var meterStereoBalance = 0.0
     private var meterRhythmicPulse = 0.0
     private var meterHarmonicEnergy = 0.0
+    private var meterVocalEnvelope = 0.0
+    private var meterVocalBrightness = 0.0
+    private var meterVocalPresence = 0.0
+    private var microphoneTapInstalled = false
     private var previousBass = 0.0
     private var previousMid = 0.0
     private var previousTreble = 0.0
@@ -95,7 +100,7 @@ final class ProceduralAudioEngine {
         engine.stop()
     }
 
-    func update(sequencer: SequencerState, bassVoice: SynthVoice, leadVoice: SynthVoice, delaySettings: MultiTapDelaySettings, mixer: AudioMixerState, liveNotes: Set<Int>, masterLevel: Double, masterDrive: Double, stereoWidth: Double, limiterCeiling: Double, limiterRelease: Double) {
+    func update(sequencer: SequencerState, bassVoice: SynthVoice, leadVoice: SynthVoice, delaySettings: MultiTapDelaySettings, mixer: AudioMixerState, liveNotes: Set<Int>, masterLevel: Double, masterDrive: Double, stereoWidth: Double, limiterCeiling: Double, limiterRelease: Double, vocoder: VocoderState) {
         lock.lock()
         state.sequencer = sequencer
         state.bassVoice = bassVoice
@@ -108,7 +113,36 @@ final class ProceduralAudioEngine {
         state.stereoWidth = stereoWidth
         state.limiterCeiling = limiterCeiling
         state.limiterRelease = limiterRelease
+        state.vocoder = vocoder
         lock.unlock()
+    }
+
+    func setMicrophoneInputEnabled(_ enabled: Bool) throws {
+        let inputNode = engine.inputNode
+        if enabled {
+            let format = inputNode.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                throw NSError(domain: "EyeCandyAudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input device is available."])
+            }
+            if !microphoneTapInstalled {
+                inputNode.installTap(onBus: 0, bufferSize: 1_024, format: nil) { [weak self] buffer, _ in
+                    self?.analyzeMicrophone(buffer)
+                }
+                microphoneTapInstalled = true
+            }
+            if engine.isRunning {
+                engine.stop()
+                try engine.start()
+            }
+        } else if microphoneTapInstalled {
+            inputNode.removeTap(onBus: 0)
+            microphoneTapInstalled = false
+            meterLock.lock()
+            meterVocalEnvelope = 0
+            meterVocalBrightness = 0
+            meterVocalPresence = 0
+            meterLock.unlock()
+        }
     }
 
     func meterSnapshot() -> AudioMeterSnapshot {
@@ -126,7 +160,10 @@ final class ProceduralAudioEngine {
             spectralCentroid: meterSpectralCentroid,
             stereoBalance: meterStereoBalance,
             rhythmicPulse: meterRhythmicPulse,
-            harmonicEnergy: meterHarmonicEnergy
+            harmonicEnergy: meterHarmonicEnergy,
+            vocalEnvelope: meterVocalEnvelope,
+            vocalBrightness: meterVocalBrightness,
+            vocalPresence: meterVocalPresence
         )
         meterPeakLeft *= 0.82
         meterPeakRight *= 0.82
@@ -139,6 +176,9 @@ final class ProceduralAudioEngine {
         meterStereoBalance *= 0.90
         meterRhythmicPulse *= 0.70
         meterHarmonicEnergy *= 0.88
+        meterVocalEnvelope *= 0.86
+        meterVocalBrightness *= 0.88
+        meterVocalPresence *= 0.86
         meterLimitedFrames = 0
         meterLock.unlock()
         return snapshot
@@ -152,6 +192,7 @@ final class ProceduralAudioEngine {
         let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
         let secondsPerStep = 60.0 / max(40.0, snapshot.sequencer.bpm) / 4.0
         let patternLength = max(1, min(16, snapshot.sequencer.patternLength))
+        let vocal = microphoneSignal()
 
         for frame in 0..<frameCount {
             let swung = swungStepPosition(time: sampleTime, secondsPerStep: secondsPerStep, sequencer: snapshot.sequencer)
@@ -176,6 +217,9 @@ final class ProceduralAudioEngine {
                 let leadStep = laneStep(snapshot.sequencer.lead, absoluteStep: absoluteStep)
                 bass = synthSample(lane: snapshot.sequencer.bass, voice: snapshot.bassVoice, step: bassStep, phase: stepPhase, phaseStore: &bassPhase, filterState: &bassFilterState, baseNote: 36, active: activeBassStep, velocity: bassStepVelocity, ratchet: bassRatchet)
                 lead = synthSample(lane: snapshot.sequencer.lead, voice: snapshot.leadVoice, step: leadStep, phase: stepPhase, phaseStore: &leadPhase, filterState: &leadFilterState, baseNote: 60, active: activeLeadStep, velocity: leadStepVelocity, ratchet: leadRatchet)
+                if snapshot.vocoder.enabled {
+                    lead = vocodedCarrier(lead, vocal: vocal, settings: snapshot.vocoder)
+                }
                 drums = drumSample()
             }
             let live = liveKeyboardSample(notes: snapshot.liveNotes)
@@ -194,6 +238,60 @@ final class ProceduralAudioEngine {
         }
 
         return noErr
+    }
+
+    private func analyzeMicrophone(_ buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData, buffer.frameLength > 0 else { return }
+        let samples = channelData[0]
+        let frameCount = Int(buffer.frameLength)
+        let sampleStride = max(1, frameCount / 512)
+        var sumSquares = 0.0
+        var difference = 0.0
+        var crossings = 0
+        var previous = Double(samples[0])
+        var measured = 0
+
+        for index in Swift.stride(from: 0, to: frameCount, by: sampleStride) {
+            let value = Double(samples[index])
+            sumSquares += value * value
+            difference += abs(value - previous)
+            if (value >= 0) != (previous >= 0) { crossings += 1 }
+            previous = value
+            measured += 1
+        }
+
+        guard measured > 0 else { return }
+        let rms = sqrt(sumSquares / Double(measured))
+        let envelope = clamp(rms * 7.5, min: 0, max: 1)
+        let presence = clamp((difference / Double(measured)) * 9.0, min: 0, max: 1)
+        let zeroCrossingRate = Double(crossings) * buffer.format.sampleRate / Double(max(1, measured * sampleStride))
+        let brightness = clamp((zeroCrossingRate - 90.0) / 2_900.0, min: 0, max: 1)
+
+        meterLock.lock()
+        meterVocalEnvelope += (envelope - meterVocalEnvelope) * 0.42
+        meterVocalPresence += (presence - meterVocalPresence) * 0.34
+        meterVocalBrightness += (brightness - meterVocalBrightness) * 0.28
+        meterLock.unlock()
+    }
+
+    private func microphoneSignal() -> (envelope: Double, brightness: Double, presence: Double) {
+        meterLock.lock()
+        let signal = (meterVocalEnvelope, meterVocalBrightness, meterVocalPresence)
+        meterLock.unlock()
+        return signal
+    }
+
+    private func vocodedCarrier(_ carrier: Double, vocal: (envelope: Double, brightness: Double, presence: Double), settings: VocoderState) -> Double {
+        let envelope = clamp(vocal.envelope, min: 0, max: 1)
+        guard envelope > 0.002 else { return carrier }
+        let bandCount = Double(max(4, settings.bands))
+        let formantRate = 250.0 + settings.formantShift * 900.0 + vocal.brightness * 1_300.0
+        let formant = sin(sampleTime * formantRate * .pi * 2.0) * (0.14 + vocal.presence * 0.24)
+            + sin(sampleTime * formantRate * (1.65 + bandCount * 0.018) * .pi * 2.0) * (0.06 + vocal.brightness * 0.18)
+        let driven = carrier * (1.0 + settings.carrierDrive * 5.0) + formant
+        let wet = tanh(driven * (0.78 + envelope * 1.45)) * (0.36 + envelope * 0.72)
+        let mix = clamp(settings.mix * (0.24 + envelope * 0.76), min: 0, max: 1)
+        return carrier * (1.0 - mix * 0.34) + wet * mix
     }
 
     private func latchStep(_ sequencer: SequencerState, absoluteStep: Int) {
@@ -306,6 +404,13 @@ final class ProceduralAudioEngine {
             + unisonSaw * morph * (1.0 - slow * 0.35) * 0.36
             + fm * slow * 0.22
             + ring * (1.0 - slow) * 0.18
+        let choir = formant * (0.62 + slow * 0.18)
+            + ensembleA * 0.18
+            + ensembleB * 0.16
+            + sin(phaseStore * .pi * 2.0 * 2.0 + lfo * 0.4) * 0.12
+        let resonator = sin(phaseStore * .pi * 2.0 + sin(phaseStore * .pi * 6.0) * (0.3 + voice.resonance * 1.8)) * 0.46
+            + sin(phaseStore * .pi * 2.0 * 2.73) * 0.22
+            + sin(phaseStore * .pi * 2.0 * 4.12) * 0.12
         let raw: Double
         switch voice.instrument {
         case .acidSaw:
@@ -350,6 +455,12 @@ final class ProceduralAudioEngine {
             raw = synclavier
         case .vectorMorph:
             raw = vectorMorph
+        case .vocoderCarrier:
+            raw = unisonSaw * 0.38 + formant * 0.42 + sine * 0.20
+        case .choirHarmonics:
+            raw = choir
+        case .resonatorBloom:
+            raw = resonator + grain * 0.18
         }
         let ratchetPhase = (phase * Double(max(1, ratchet))).truncatingRemainder(dividingBy: 1)
         let attack = max(0.001, voice.attack * 0.45)

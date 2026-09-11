@@ -1,16 +1,18 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var selectedPanel: InspectorPanel = .studio
+    @Published var selectedPanel: InspectorPanel = .synth
     @Published var selectedFamily: PresetFamily = .all
     @Published var selectedPreset: VisualPreset = PresetLibrary.visualPresets[0]
     @Published var visualPresetFilter = ""
     @Published var tempoMode: TempoMode = .manual
     @Published var sequencer = SequencerState()
     @Published var bassVoice = SynthVoice()
-    @Published var leadVoice = SynthVoice(instrument: .syncLead, level: 0.32, octave: 4, cutoff: 0.68, resonance: 0.18, glide: 0.08, accent: 0.45)
+    @Published var leadVoice = SynthVoice(instrument: .vocoderCarrier, level: 0.38, octave: 4, cutoff: 0.74, resonance: 0.42, glide: 0.08, accent: 0.45, chorus: 0.42, shimmer: 0.24)
+    @Published var vocoder = VocoderState()
     @Published var delaySettings = MultiTapDelaySettings()
     @Published var mixer = AudioMixerState()
     @Published var modSlots = [ModSlot(enabled: true, source: .beat, destination: .zoom, amount: 0.24, rate: 1.0), ModSlot(), ModSlot()]
@@ -25,7 +27,7 @@ final class AppModel: ObservableObject {
     @Published var demosceneIntensity = 0.62
     @Published var lightSynthMode: LightSynthMode = .neuralMandala
     @Published var lightSynthIntensity = 0.76
-    @Published var audioVisualizerMode: AudioVisualizerMode = .spectralConductor
+    @Published var audioVisualizerMode: AudioVisualizerMode = .vocalPrism
     @Published var audioVisualizerIntensity = 0.90
     @Published var audioVisualizerDetail = 0.86
     @Published var audioVisualizerPersistence = 0.64
@@ -163,7 +165,7 @@ final class AppModel: ObservableObject {
             pushAudioState()
             try audioEngine.start()
             startAudioMetering()
-            status = "Audio engine running"
+            status = "Advanced synth and Vocal Prism ready"
         } catch {
             status = "Audio failed: \(error.localizedDescription)"
         }
@@ -178,6 +180,65 @@ final class AppModel: ObservableObject {
 
     func refreshAudioMeter() {
         audioMeter = audioEngine.meterSnapshot()
+    }
+
+    func setVocoderEnabled(_ enabled: Bool) {
+        guard enabled else {
+            vocoder.enabled = false
+            try? audioEngine.setMicrophoneInputEnabled(false)
+            pushAudioState()
+            status = "Mic vocoder disabled"
+            return
+        }
+
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            activateVocoder()
+        case .notDetermined:
+            status = "Requesting microphone access..."
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if granted {
+                        self.activateVocoder()
+                    } else {
+                        self.vocoder.enabled = false
+                        self.status = "Microphone access was not granted"
+                    }
+                }
+            }
+        case .denied, .restricted:
+            vocoder.enabled = false
+            status = "Allow microphone access in System Settings to use the vocoder"
+        @unknown default:
+            vocoder.enabled = false
+            status = "Microphone authorization is unavailable"
+        }
+    }
+
+    func applyVocoderPerformance() {
+        leadVoice.instrument = .vocoderCarrier
+        leadVoice.chorus = 0.42
+        leadVoice.shimmer = 0.28
+        leadVoice.drive = 0.34
+        audioVisualizerMode = .vocalPrism
+        audioVisualizerIntensity = max(audioVisualizerIntensity, 0.88)
+        audioVisualizerDetail = max(audioVisualizerDetail, 0.84)
+        psychedelicFieldIntensity = max(psychedelicFieldIntensity, 0.82)
+        setVocoderEnabled(true)
+    }
+
+    private func activateVocoder() {
+        do {
+            try audioEngine.setMicrophoneInputEnabled(true)
+            vocoder.enabled = true
+            pushAudioState()
+            startAudioMetering()
+            status = "Mic vocoder active - microphone is not monitored"
+        } catch {
+            vocoder.enabled = false
+            status = "Mic vocoder unavailable: \(error.localizedDescription)"
+        }
     }
 
     func toggleNote(_ midiNote: Int) {
@@ -1392,7 +1453,7 @@ final class AppModel: ObservableObject {
     }
 
     func applyMusicSyncedPerformance() {
-        audioVisualizerMode = .spectralConductor
+        audioVisualizerMode = .psychedelicKaleidoscope
         audioVisualizerIntensity = 0.86
         audioVisualizerDetail = 0.82
         audioVisualizerPersistence = 0.62
@@ -1435,6 +1496,23 @@ final class AppModel: ObservableObject {
         experimentalVideoMode = .clean
         feedbackSimulatorMode = .off
         status = "Modern music visualizer enabled"
+    }
+
+    func applyPsychedelic4KVisualizer() {
+        applyModernVisualFoundation()
+        recordingResolution = .fourK
+        recordingFPS = 30
+        audioVisualizerMode = .psychedelicKaleidoscope
+        audioVisualizerIntensity = 0.94
+        audioVisualizerDetail = 1.0
+        audioVisualizerPersistence = 0.76
+        psychedelicFieldMode = .everything
+        psychedelicFieldIntensity = 0.90
+        psychedelicFieldMotion = 0.92
+        metalVisualizerEffectMode = .psychedelicPlasma
+        metalVisualizerEffectIntensity = 0.92
+        metalVisualizerEffectSpeed = 0.90
+        status = "4K psychedelic visualizer enabled"
     }
 
     func apply4KMasterOutput() {
@@ -1554,7 +1632,8 @@ final class AppModel: ObservableObject {
             masterDrive: masterDrive,
             stereoWidth: stereoWidth,
             limiterCeiling: limiterCeiling,
-            limiterRelease: limiterRelease
+            limiterRelease: limiterRelease,
+            vocoder: vocoder
         )
     }
 

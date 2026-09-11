@@ -121,6 +121,10 @@ enum AudioVisualizerMode: String, CaseIterable, Identifiable {
     case harmonicOrbits = "Harmonic Orbits"
     case granularBloom = "Granular Bloom"
     case spectralConductor = "Spectral Conductor"
+    case neonPulseScope = "Neon Pulse Scope"
+    case laserSpectrogram = "Laser Spectrogram"
+    case psychedelicKaleidoscope = "Psychedelic Kaleidoscope"
+    case vocalPrism = "Vocal Prism"
     case hyperAnalyzer = "Hyper Analyzer"
 
     var id: String { rawValue }
@@ -504,6 +508,9 @@ struct AudioMeterSnapshot: Hashable {
     var stereoBalance = 0.0
     var rhythmicPulse = 0.0
     var harmonicEnergy = 0.0
+    var vocalEnvelope = 0.0
+    var vocalBrightness = 0.0
+    var vocalPresence = 0.0
 }
 
 enum BroadcastTarget: String, CaseIterable, Identifiable {
@@ -694,6 +701,15 @@ struct SynthVoice: Hashable {
     var sidechain = 0.24
 }
 
+struct VocoderState: Hashable {
+    var enabled = false
+    var mix = 0.68
+    var bands = 14
+    var formantShift = 0.52
+    var carrierDrive = 0.42
+    var visualSend = 0.86
+}
+
 struct SynthVoicePreset: Identifiable, Hashable {
     let id = UUID()
     var name: String
@@ -722,6 +738,9 @@ enum SynthInstrument: String, CaseIterable, Identifiable, Hashable {
     case solinaStringer = "Solina Stringer"
     case synclavierDigital = "Synclavier Digital"
     case vectorMorph = "Vector Morph"
+    case vocoderCarrier = "Vocoder Carrier"
+    case choirHarmonics = "Choir Harmonics"
+    case resonatorBloom = "Resonator Bloom"
 
     var id: String { rawValue }
 }

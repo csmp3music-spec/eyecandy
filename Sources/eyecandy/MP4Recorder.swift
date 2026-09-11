@@ -92,7 +92,7 @@ extension MP4RecordingRequest {
         paletteMode: .neon,
         blendMode: .additive,
         visualEngineMode: .lightTunnel,
-        audioVisualizerMode: .hyperAnalyzer,
+        audioVisualizerMode: .psychedelicKaleidoscope,
         audioVisualizerIntensity: 0.72,
         audioVisualizerDetail: 0.66,
         audioVisualizerPersistence: 0.48,
@@ -346,6 +346,14 @@ enum MP4Recorder {
             drawExportPolyphonicLoom(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
         case .spectralConductor:
             drawExportSpectralConductor(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
+        case .neonPulseScope:
+            drawExportNeonPulseScope(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
+        case .laserSpectrogram:
+            drawExportLaserSpectrogram(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
+        case .psychedelicKaleidoscope:
+            drawExportPsychedelicKaleidoscope(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
+        case .vocalPrism:
+            drawExportVocalPrism(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
         case .hyperAnalyzer:
             drawExportSpectrumTunnel(context, size: size, request: request, time: time, intensity: intensity * 0.62)
             drawExportOscilloscopeGarden(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.46)
@@ -355,6 +363,10 @@ enum MP4Recorder {
             drawExportSequencerMatrix(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.25)
             drawExportPolyphonicLoom(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.28)
             drawExportSpectralConductor(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.34)
+            drawExportNeonPulseScope(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.26)
+            drawExportLaserSpectrogram(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.24)
+            drawExportPsychedelicKaleidoscope(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.20)
+            drawExportVocalPrism(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.18)
         }
     }
 
@@ -428,6 +440,148 @@ enum MP4Recorder {
             }
             context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: loopT + time * 0.02, alpha: intensity * (0.10 + energy * 0.22)))
             context.setLineWidth(0.7 + energy * 3.0)
+            context.addPath(path)
+            context.strokePath()
+        }
+    }
+
+    private static func drawExportNeonPulseScope(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double) {
+        let scale = min(1.8, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let lanes = 4 + Int(request.audioVisualizerDetail * 6.0 * scale)
+        let points = 180 + Int(120.0 * scale)
+        context.setBlendMode(.plusLighter)
+
+        for lane in 0..<lanes {
+            let laneT = Double(lane) / Double(max(1, lanes - 1))
+            let baseline = size.height * (0.14 + laneT * 0.72)
+            let amplitude = size.height * (0.025 + energy * 0.13)
+            let path = CGMutablePath()
+            for point in 0...points {
+                let u = Double(point) / Double(points)
+                let carrier = sin(u * .pi * (3.0 + laneT * 14.0) + time * (1.8 + energy * 4.0))
+                let modulator = sin(u * .pi * (19.0 + request.audioVisualizerDetail * 26.0) - time * (1.0 + energy * 7.0))
+                let kick = sin(beat * .pi * 2.0 + laneT * 5.2) * pow(max(0, sin(beat * .pi * 2.0)), 3.0)
+                let y = baseline + (carrier * 0.66 + modulator * 0.24 + kick * 0.36) * amplitude
+                if point == 0 { path.move(to: CGPoint(x: u * size.width, y: y)) } else { path.addLine(to: CGPoint(x: u * size.width, y: y)) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: laneT + time * 0.03, alpha: intensity * (0.12 + energy * 0.20)))
+            context.setLineWidth(1.0 + energy * 4.4)
+            context.addPath(path)
+            context.strokePath()
+        }
+    }
+
+    private static func drawExportLaserSpectrogram(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double) {
+        let scale = min(1.8, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let columns = 52 + Int(request.audioVisualizerDetail * 110.0 * scale)
+        let rows = 12 + Int(request.audioVisualizerDetail * 20.0)
+        let cellWidth = size.width / Double(columns)
+        let cellHeight = size.height / Double(rows)
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let sweep = (time * (0.12 + energy * 0.42)).truncatingRemainder(dividingBy: 1)
+        context.setBlendMode(.plusLighter)
+
+        for column in 0..<columns {
+            let xT = Double(column) / Double(max(1, columns - 1))
+            let band = exportSpectrumBin(column, count: columns, time: time, request: request)
+            for row in 0..<rows {
+                let yT = Double(row) / Double(max(1, rows - 1))
+                let harmonic = sin((xT * 17.0 + yT * 9.0 + time * 1.4) * .pi)
+                let value = max(0, band * (1.0 - yT * 0.72) + harmonic * 0.14 + energy * yT * 0.22)
+                guard value > 0.18 else { continue }
+                let height = cellHeight * (0.58 + value * 0.72)
+                let x = Double(column) * cellWidth
+                let y = Double(row) * cellHeight
+                let alpha = intensity * (0.025 + value * 0.13)
+                let color = paletteColor(request.paletteMode, preset: request.preset, time: xT * 0.42 + yT * 0.34 + time * 0.035, alpha: alpha)
+                context.setFillColor(color)
+                context.fill(CGRect(x: x, y: y, width: cellWidth + 0.8, height: height))
+                context.fill(CGRect(x: x, y: size.height - y - height, width: cellWidth + 0.8, height: height))
+            }
+        }
+
+        let scanX = size.width * sweep
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: intensity * (0.025 + energy * 0.07)))
+        context.fill(CGRect(x: scanX - cellWidth * 1.5, y: 0, width: cellWidth * 3.0, height: size.height))
+    }
+
+    private static func drawExportPsychedelicKaleidoscope(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double) {
+        let scale = min(1.8, max(1.0, sqrt((size.width * size.height) / (1280.0 * 720.0))))
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let segments = 7 + Int(request.audioVisualizerDetail * 13.0)
+        let rings = 10 + Int(request.audioVisualizerDetail * 22.0 * scale)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let pulse = pow(max(0, sin(beat * .pi * 2.0)), 4.0) * (0.42 + energy * 0.58)
+        context.setBlendMode(.plusLighter)
+
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.05 + ringT * (0.48 + energy * 0.13))
+            for segment in 0..<segments {
+                let segmentT = Double(segment) / Double(segments)
+                let baseAngle = segmentT * .pi * 2.0 + time * (0.16 + energy * 0.48) * (segment.isMultiple(of: 2) ? 1 : -1)
+                let path = CGMutablePath()
+                for point in 0...26 {
+                    let u = Double(point) / 26.0
+                    let angle = baseAngle + (u - 0.5) * .pi / Double(segments) * (1.2 + energy * 1.4)
+                    let ripple = sin(u * .pi * (3.0 + energy * 7.0) + time * 2.4 + ringT * 8.0) * shortest * (0.012 + pulse * 0.020)
+                    let r = radius + ripple + u * shortest * (0.018 + energy * 0.025)
+                    let p = CGPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r * (0.58 + energy * 0.28))
+                    if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                }
+                context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: segmentT + ringT * 0.46 + time * 0.035 + beat * 0.08, alpha: intensity * (0.026 + (1.0 - ringT) * 0.075 + pulse * 0.055)))
+                context.setLineWidth(0.7 + energy * 3.8 + pulse * 1.8)
+                context.addPath(path)
+                context.strokePath()
+            }
+        }
+    }
+
+    private static func drawExportVocalPrism(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double) {
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let vocal = 0.34 + pow(max(0, sin(time * 1.37 + beat * .pi * 2.0)), 3.0) * 0.66
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        let rays = 12 + Int(request.audioVisualizerDetail * 36)
+        let rotation = time * (0.18 + energy * 0.44)
+        context.setBlendMode(.plusLighter)
+
+        for ray in 0..<rays {
+            let rayT = Double(ray) / Double(rays)
+            let angle = rayT * .pi * 2.0 + rotation
+            let inner = shortest * (0.035 + vocal * 0.10)
+            let outer = shortest * (0.18 + energy * 0.34 + vocal * 0.12)
+            let width = shortest * (0.014 + vocal * 0.026)
+            let dx = -sin(angle) * width
+            let dy = cos(angle) * width
+            let start = CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner)
+            let end = CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer)
+            let prism = CGMutablePath()
+            prism.move(to: CGPoint(x: start.x + dx, y: start.y + dy))
+            prism.addLine(to: CGPoint(x: end.x + dx * 0.22, y: end.y + dy * 0.22))
+            prism.addLine(to: CGPoint(x: end.x - dx * 0.22, y: end.y - dy * 0.22))
+            prism.addLine(to: CGPoint(x: start.x - dx, y: start.y - dy))
+            prism.closeSubpath()
+            context.setFillColor(paletteColor(request.paletteMode, preset: request.preset, time: rayT + time * 0.045, alpha: intensity * (0.035 + energy * 0.08 + vocal * 0.12)))
+            context.addPath(prism)
+            context.fillPath()
+        }
+
+        let rings = 3 + Int(request.audioVisualizerPersistence * 8)
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.07 + ringT * (0.28 + vocal * 0.18))
+            let path = CGMutablePath()
+            for point in 0...96 {
+                let t = Double(point) / 96.0 * .pi * 2.0
+                let wobble = 1.0 + sin(t * (4.0 + energy * 8.0) + rotation * 2.0) * (0.05 + vocal * 0.14)
+                let p = CGPoint(x: center.x + cos(t + rotation) * radius * wobble, y: center.y + sin(t + rotation) * radius * (0.46 + energy * 0.26) * wobble)
+                if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: ringT + time * 0.03, alpha: intensity * (0.06 + vocal * 0.15 + energy * 0.10)))
+            context.setLineWidth(1.0 + energy * 3.0)
             context.addPath(path)
             context.strokePath()
         }
