@@ -17,25 +17,25 @@ final class AppModel: ObservableObject {
     @Published var liveNotes: Set<Int> = []
     @Published var autopilotEnabled = false
     @Published var autopilotBars = 8
-    @Published var holographicMode: HolographicMode = .ghostPrism
+    @Published var holographicMode: HolographicMode = .off
     @Published var hologramDepth = 0.42
-    @Published var minterEffectMode: MinterEffectMode = .neonStampede
+    @Published var minterEffectMode: MinterEffectMode = .off
     @Published var minterIntensity = 0.48
-    @Published var demosceneEffectMode: DemosceneEffectMode = .megaDemo
+    @Published var demosceneEffectMode: DemosceneEffectMode = .off
     @Published var demosceneIntensity = 0.62
-    @Published var lightSynthMode: LightSynthMode = .everything
-    @Published var lightSynthIntensity = 0.68
-    @Published var audioVisualizerMode: AudioVisualizerMode = .hyperAnalyzer
-    @Published var audioVisualizerIntensity = 0.72
-    @Published var audioVisualizerDetail = 0.66
-    @Published var audioVisualizerPersistence = 0.48
+    @Published var lightSynthMode: LightSynthMode = .neuralMandala
+    @Published var lightSynthIntensity = 0.76
+    @Published var audioVisualizerMode: AudioVisualizerMode = .spectralConductor
+    @Published var audioVisualizerIntensity = 0.90
+    @Published var audioVisualizerDetail = 0.86
+    @Published var audioVisualizerPersistence = 0.64
     @Published var gpuVisualizerBackend: GPUVisualizerBackend = .metal
-    @Published var metalVisualizerEffectMode: MetalVisualizerEffectMode = .psychedelicPlasma
-    @Published var metalVisualizerEffectIntensity = 0.68
-    @Published var metalVisualizerEffectSpeed = 0.72
-    @Published var psychedelicFieldMode: PsychedelicFieldMode = .everything
-    @Published var psychedelicFieldIntensity = 0.82
-    @Published var psychedelicFieldMotion = 0.78
+    @Published var metalVisualizerEffectMode: MetalVisualizerEffectMode = .fractalBloom
+    @Published var metalVisualizerEffectIntensity = 0.88
+    @Published var metalVisualizerEffectSpeed = 0.82
+    @Published var psychedelicFieldMode: PsychedelicFieldMode = .liquidFractal
+    @Published var psychedelicFieldIntensity = 0.88
+    @Published var psychedelicFieldMotion = 0.86
     @Published var macroX = 0.58
     @Published var macroY = 0.64
     @Published var photonDirectorEnabled = true
@@ -44,14 +44,14 @@ final class AppModel: ObservableObject {
     @Published var flashSafety = true
     @Published var paletteMode: LightPaletteMode = .neon
     @Published var blendMode: LightBlendMode = .additive
-    @Published var visualEngineMode: VisualEngineMode = .engineAutopilot
+    @Published var visualEngineMode: VisualEngineMode = .auroraFluid
     @Published var experimentalVideoMode: ExperimentalVideoMode = .clean
     @Published var experimentalVideoIntensity = 0.55
     @Published var videoKeyThreshold = 0.52
     @Published var videoEdgeGain = 0.46
     @Published var videoColorWarp = 0.58
     @Published var videoOscillatorRate = 0.50
-    @Published var feedbackSimulatorMode: FeedbackSimulatorMode = .feedbackLab
+    @Published var feedbackSimulatorMode: FeedbackSimulatorMode = .off
     @Published var feedbackSimulatorIntensity = 0.52
     @Published var feedbackSimulatorDecay = 0.68
     @Published var feedbackSimulatorZoom = 0.46
@@ -1389,6 +1389,52 @@ final class AppModel: ObservableObject {
         bloom = min(0.58, max(bloom, 0.36))
         flashSafety = true
         status = "Synth visualizer enabled"
+    }
+
+    func applyMusicSyncedPerformance() {
+        audioVisualizerMode = .spectralConductor
+        audioVisualizerIntensity = 0.86
+        audioVisualizerDetail = 0.82
+        audioVisualizerPersistence = 0.62
+        lightSynthMode = .everything
+        lightSynthIntensity = min(1.0, max(lightSynthIntensity, 0.78))
+        bassVoice.chorus = 0.24
+        bassVoice.sidechain = 0.58
+        bassVoice.shimmer = 0.04
+        leadVoice.chorus = 0.56
+        leadVoice.shimmer = 0.34
+        leadVoice.sidechain = 0.34
+        psychedelicFieldMode = .everything
+        psychedelicFieldIntensity = min(1.0, max(psychedelicFieldIntensity, 0.86))
+        status = "Music-synced performance enabled"
+        pushAudioState()
+    }
+
+    func applyModernVisualFoundation() {
+        activeSceneSlot = nil
+        queuedSceneSlot = nil
+        visualEngineMode = .auroraFluid
+        lightSynthMode = .neuralMandala
+        lightSynthIntensity = 0.76
+        audioVisualizerMode = .spectralConductor
+        audioVisualizerIntensity = 0.90
+        audioVisualizerDetail = 0.86
+        audioVisualizerPersistence = 0.64
+        gpuVisualizerBackend = .metal
+        metalVisualizerEffectMode = .fractalBloom
+        metalVisualizerEffectIntensity = 0.88
+        metalVisualizerEffectSpeed = 0.82
+        psychedelicFieldMode = .liquidFractal
+        psychedelicFieldIntensity = 0.88
+        psychedelicFieldMotion = 0.86
+        paletteMode = .colourspace
+        blendMode = .screen
+        demosceneEffectMode = .off
+        minterEffectMode = .off
+        holographicMode = .off
+        experimentalVideoMode = .clean
+        feedbackSimulatorMode = .off
+        status = "Modern music visualizer enabled"
     }
 
     func apply4KMasterOutput() {

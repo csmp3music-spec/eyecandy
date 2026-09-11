@@ -65,6 +65,8 @@ final class ProceduralAudioEngine {
     private var meterSpectralFlux = 0.0
     private var meterSpectralCentroid = 0.0
     private var meterStereoBalance = 0.0
+    private var meterRhythmicPulse = 0.0
+    private var meterHarmonicEnergy = 0.0
     private var previousBass = 0.0
     private var previousMid = 0.0
     private var previousTreble = 0.0
@@ -122,7 +124,9 @@ final class ProceduralAudioEngine {
             transient: meterTransient,
             spectralFlux: meterSpectralFlux,
             spectralCentroid: meterSpectralCentroid,
-            stereoBalance: meterStereoBalance
+            stereoBalance: meterStereoBalance,
+            rhythmicPulse: meterRhythmicPulse,
+            harmonicEnergy: meterHarmonicEnergy
         )
         meterPeakLeft *= 0.82
         meterPeakRight *= 0.82
@@ -133,6 +137,8 @@ final class ProceduralAudioEngine {
         meterTransient *= 0.72
         meterSpectralFlux *= 0.76
         meterStereoBalance *= 0.90
+        meterRhythmicPulse *= 0.70
+        meterHarmonicEnergy *= 0.88
         meterLimitedFrames = 0
         meterLock.unlock()
         return snapshot
@@ -356,7 +362,10 @@ final class ProceduralAudioEngine {
             env = voice.sustain + (1.0 - voice.sustain) * exp(-decayPhase * (1.0 + decay * 8.0))
         }
         let accent = step % 4 == 0 ? 1.0 + voice.accent : 1.0
-        var shaped = raw + sub * voice.subLevel * 0.45 + noise * voice.noiseLevel
+        let chorusPhase = (phaseStore + sin(sampleTime * (0.14 + voice.lfoRate * 0.72) * .pi * 2.0) * (0.002 + voice.chorus * 0.018)).truncatingRemainder(dividingBy: 1)
+        let chorusWave = sin(chorusPhase * .pi * 2.0) + sin((chorusPhase * 2.01).truncatingRemainder(dividingBy: 1) * .pi * 2.0) * 0.36
+        let shimmer = sin(phaseStore * .pi * 4.0 + lfo * 0.9) * voice.shimmer * 0.32
+        var shaped = raw * (1.0 - voice.chorus * 0.30) + chorusWave * voice.chorus * 0.30 + sub * voice.subLevel * 0.45 + noise * voice.noiseLevel + shimmer
         let fold = max(0.0, voice.wavefold)
         shaped = sin(shaped * (1.0 + fold * 6.0))
         shaped = tanh(shaped * (1.0 + voice.drive * 8.0))
@@ -366,7 +375,8 @@ final class ProceduralAudioEngine {
         filterState += (shaped - filterState) * coeff
         let filtered = filterState + (shaped - filterState) * voice.resonance * 0.35
         let crushed = applyBitcrush(filtered, amount: max(voice.bitcrush, voice.instrument == .bitcrushLead ? 0.45 : 0.0))
-        return crushed * env * voice.level * accent * velocity
+        let sidechainPump = 1.0 - min(0.70, kickEnv * voice.sidechain * 0.68)
+        return crushed * env * voice.level * accent * velocity * sidechainPump
     }
 
     private func drumSample() -> Double {
@@ -516,6 +526,8 @@ final class ProceduralAudioEngine {
         let energy = bassBand + midBand + trebleBand + 0.000_1
         let centroid = (bassBand * 0.16 + midBand * 0.52 + trebleBand * 0.92) / energy
         let balance = clamp((abs(right) - abs(left)) * 1.6, min: -1, max: 1)
+        let rhythmicPulse = clamp(kickEnv * 0.82 + snareEnv * 0.44 + hatEnv * 0.18 + clapEnv * 0.26, min: 0, max: 1)
+        let harmonicEnergy = clamp(abs(bass) * 0.48 + abs(lead) * 0.88 + abs(live) * 0.72 + abs(delay) * 0.20, min: 0, max: 1)
 
         meterLock.lock()
         meterBass = max(meterBass, bassBand)
@@ -525,6 +537,8 @@ final class ProceduralAudioEngine {
         meterSpectralFlux = max(meterSpectralFlux, clamp(flux * 0.55, min: 0, max: 1))
         meterSpectralCentroid += (centroid - meterSpectralCentroid) * 0.10
         meterStereoBalance += (balance - meterStereoBalance) * 0.08
+        meterRhythmicPulse = max(meterRhythmicPulse, rhythmicPulse)
+        meterHarmonicEnergy = max(meterHarmonicEnergy, harmonicEnergy)
         meterLock.unlock()
     }
 

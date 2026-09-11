@@ -98,6 +98,8 @@ struct RendererView: View {
             drawShapeConstellationEngine(context: &context, size: size, time: time, preset: preset, stereoOffset: stereoOffset)
         case .liquidCells:
             drawLiquidCellsEngine(context: &context, size: size, time: time, preset: preset, stereoOffset: stereoOffset)
+        case .auroraFluid:
+            drawAuroraFluidEngine(context: &context, size: size, time: time, preset: preset, beat: beat, stereoOffset: stereoOffset)
         case .reactionDiffusion:
             drawReactionDiffusionEngine(context: &context, size: size, time: time, preset: preset, stereoOffset: stereoOffset)
         case .kaleidoscopeMaze:
@@ -113,7 +115,7 @@ struct RendererView: View {
 
     private func resolvedVisualEngine(time: TimeInterval) -> VisualEngineMode {
         guard model.visualEngineMode == .engineAutopilot else { return model.visualEngineMode }
-        let engines: [VisualEngineMode] = [.lightTunnel, .vectorField, .metaballs, .terrainGrid, .oscilloscopeRibbons, .fractalLightning, .fractalTrees, .particleNebula, .shapeConstellation, .liquidCells, .reactionDiffusion, .kaleidoscopeMaze, .moireField, .slitScanRibbons, .cellularAutomata]
+        let engines: [VisualEngineMode] = [.lightTunnel, .vectorField, .metaballs, .terrainGrid, .oscilloscopeRibbons, .fractalLightning, .fractalTrees, .particleNebula, .shapeConstellation, .liquidCells, .auroraFluid, .reactionDiffusion, .kaleidoscopeMaze, .moireField, .slitScanRibbons, .cellularAutomata]
         return engines[Int(time / 12.0) % engines.count]
     }
 
@@ -386,6 +388,51 @@ struct RendererView: View {
         }
     }
 
+    private func drawAuroraFluidEngine(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, beat: Double, stereoOffset: Double) {
+        let meter = model.audioMeter
+        let columns = 34 + Int(model.audioVisualizerDetail * 26)
+        let rows = 20 + Int(model.audioVisualizerDetail * 14)
+        let cellWidth = size.width / Double(columns)
+        let cellHeight = size.height / Double(rows)
+        let flow = time * (0.32 + meter.spectralCentroid * 0.72)
+        let pulse = min(1.0, meter.rhythmicPulse + meter.transient * 0.52)
+        var layer = context
+        layer.blendMode = .plusLighter
+
+        for row in 0..<rows {
+            let v = Double(row) / Double(max(1, rows - 1))
+            for column in 0..<columns {
+                let u = Double(column) / Double(max(1, columns - 1))
+                let wave = sin(u * 10.0 + flow * 2.3 + sin(v * 7.0 - flow) * 1.8)
+                    + cos(v * 14.0 - flow * 1.7 + meter.stereoBalance * 1.6)
+                    + sin((u + v) * 18.0 + beat * .pi * 2.0) * (0.32 + meter.mid * 0.58)
+                let density = max(0, wave * 0.24 + 0.40 + meter.harmonicEnergy * 0.22)
+                guard density > 0.20 else { continue }
+                let driftX = sin(v * 12.0 + flow) * cellWidth * (0.3 + meter.stereoBalance * 0.18)
+                let driftY = cos(u * 9.0 - flow * 1.2) * cellHeight * (0.45 + pulse * 0.85)
+                let rect = CGRect(x: Double(column) * cellWidth + driftX + stereoOffset, y: Double(row) * cellHeight + driftY, width: cellWidth + 1.4, height: cellHeight + 1.4)
+                let hue = u * 0.32 + v * 0.56 + flow * 0.06 + meter.spectralCentroid * 0.24
+                layer.fill(Path(rect), with: .color(Color.hsba(hue, 0.88 + meter.treble * 0.12, 1.0).opacity((0.024 + density * 0.095 + pulse * 0.055) * model.lightSynthIntensity)))
+            }
+        }
+
+        let center = CGPoint(x: size.width * (0.5 + meter.stereoBalance * 0.10) + stereoOffset, y: size.height * 0.5)
+        let shortest = min(size.width, size.height)
+        for ribbon in 0..<7 {
+            let ribbonT = Double(ribbon) / 7.0
+            var path = Path()
+            for point in 0...180 {
+                let u = Double(point) / 180.0
+                let phase = u * .pi * (3.0 + ribbonT * 8.0) + flow * (1.2 + ribbonT)
+                let radius = shortest * (0.10 + ribbonT * 0.32 + sin(phase * 2.0) * (0.025 + meter.bass * 0.065))
+                let angle = phase + sin(flow + ribbonT * 8.0) * (0.16 + meter.treble * 0.18)
+                let p = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius * (0.46 + meter.mid * 0.30))
+                if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            layer.stroke(path, with: .color(blendedColor(preset: preset, t: ribbonT + flow * 0.05).opacity((0.10 + pulse * 0.20) * model.lightSynthIntensity)), lineWidth: 0.8 + meter.treble * 3.0 + pulse * 2.6)
+        }
+    }
+
     private func drawReactionDiffusionEngine(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, stereoOffset: Double) {
         let cols = 54
         let rows = 34
@@ -605,6 +652,8 @@ struct RendererView: View {
             drawHarmonicOrbitsVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
         case .granularBloom:
             drawGranularBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity)
+        case .spectralConductor:
+            drawSpectralConductorVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity, beat: beat)
         case .hyperAnalyzer:
             drawSpectrumTunnel(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.72)
             drawOscilloscopeGarden(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.58, beat: beat)
@@ -617,6 +666,7 @@ struct RendererView: View {
             drawSequencerMatrixVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.28, beat: beat)
             drawHarmonicOrbitsVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.32, beat: beat)
             drawGranularBloomVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.30)
+            drawSpectralConductorVisualizer(context: &context, size: size, time: time, preset: preset, intensity: intensity * 0.34, beat: beat)
         }
     }
 
@@ -928,6 +978,45 @@ struct RendererView: View {
         pointer.move(to: center)
         pointer.addLine(to: CGPoint(x: center.x + cos(markerAngle) * markerRadius, y: center.y + sin(markerAngle) * markerRadius * 0.64))
         context.stroke(pointer, with: .color(.white.opacity(intensity * (0.12 + model.audioMeter.transient * 0.32))), lineWidth: 1.0 + model.audioMeter.bass * 4.0)
+    }
+
+    private func drawSpectralConductorVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double, beat: Double) {
+        let meter = model.audioMeter
+        let center = CGPoint(x: size.width * (0.5 + meter.stereoBalance * 0.12), y: size.height * 0.5)
+        let shortest = min(size.width, size.height)
+        let pulse = min(1.0, meter.rhythmicPulse + meter.transient * 0.45)
+        let harmonic = meter.harmonicEnergy
+        let rings = 3 + Int(model.audioVisualizerPersistence * 8)
+
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.07 + ringT * (0.36 + meter.bass * 0.16) + pulse * 0.035)
+            let yScale = 0.46 + meter.mid * 0.30 + ringT * 0.16
+            let phase = time * (0.25 + meter.spectralCentroid * 0.85) * (ring.isMultiple(of: 2) ? 1 : -1)
+            var orbit = Path()
+            for point in 0...120 {
+                let t = Double(point) / 120.0 * .pi * 2.0
+                let wobble = 1.0 + sin(t * (2.0 + harmonic * 6.0) + phase) * (0.06 + meter.treble * 0.14)
+                let p = CGPoint(x: center.x + cos(t + phase) * radius * wobble, y: center.y + sin(t + phase) * radius * yScale * wobble)
+                if point == 0 { orbit.move(to: p) } else { orbit.addLine(to: p) }
+            }
+            context.stroke(orbit, with: .color(blendedColor(preset: preset, t: ringT + time * 0.02).opacity(intensity * (0.05 + harmonic * 0.16 + pulse * 0.10))), lineWidth: 0.8 + meter.treble * 2.6 + pulse * 2.0)
+        }
+
+        let spokes = 10 + Int(model.audioVisualizerDetail * 30)
+        for spoke in 0..<spokes {
+            let t = Double(spoke) / Double(spokes)
+            let angle = t * .pi * 2.0 + time * (0.12 + harmonic * 0.56)
+            let inner = shortest * (0.04 + meter.bass * 0.12)
+            let outer = shortest * (0.16 + meter.mid * 0.22 + meter.treble * 0.14 + pulse * 0.10)
+            var ray = Path()
+            ray.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
+            ray.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer))
+            context.stroke(ray, with: .color(blendedColor(preset: preset, t: t + meter.spectralCentroid * 0.3).opacity(intensity * (0.04 + pulse * 0.19))), lineWidth: 0.7 + meter.treble * 3.4)
+        }
+
+        let core = shortest * (0.035 + meter.bass * 0.075 + harmonic * 0.045 + pulse * 0.035)
+        context.fill(Path(ellipseIn: CGRect(x: center.x - core, y: center.y - core, width: core * 2, height: core * 2)), with: .color(blendedColor(preset: preset, t: beat + meter.spectralCentroid).opacity(intensity * (0.16 + pulse * 0.30))))
     }
 
     private func drawGranularBloomVisualizer(context: inout GraphicsContext, size: CGSize, time: TimeInterval, preset: VisualPreset, intensity: Double) {

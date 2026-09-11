@@ -120,6 +120,7 @@ enum AudioVisualizerMode: String, CaseIterable, Identifiable {
     case sequencerMatrix = "Sequencer Matrix"
     case harmonicOrbits = "Harmonic Orbits"
     case granularBloom = "Granular Bloom"
+    case spectralConductor = "Spectral Conductor"
     case hyperAnalyzer = "Hyper Analyzer"
 
     var id: String { rawValue }
@@ -203,6 +204,7 @@ enum VisualEngineMode: String, CaseIterable, Identifiable {
     case particleNebula = "Particle Nebula"
     case shapeConstellation = "Shape Constellation"
     case liquidCells = "Liquid Cells"
+    case auroraFluid = "Aurora Fluid"
     case reactionDiffusion = "Reaction Diffusion"
     case kaleidoscopeMaze = "Kaleidoscope Maze"
     case moireField = "Moire Field"
@@ -500,6 +502,8 @@ struct AudioMeterSnapshot: Hashable {
     var spectralFlux = 0.0
     var spectralCentroid = 0.0
     var stereoBalance = 0.0
+    var rhythmicPulse = 0.0
+    var harmonicEnergy = 0.0
 }
 
 enum BroadcastTarget: String, CaseIterable, Identifiable {
@@ -685,6 +689,9 @@ struct SynthVoice: Hashable {
     var grainSize = 0.32
     var grainDensity = 0.44
     var bitcrush = 0.0
+    var chorus = 0.18
+    var shimmer = 0.08
+    var sidechain = 0.24
 }
 
 struct SynthVoicePreset: Identifiable, Hashable {

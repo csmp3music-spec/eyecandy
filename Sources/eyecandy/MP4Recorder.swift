@@ -303,6 +303,8 @@ enum MP4Recorder {
             drawFractalTreesEngine(context: context, size: size, request: request, time: time, stereoOffset: stereoOffset)
         case .particleNebula:
             drawParticleEngine(context: context, size: size, request: request, time: time, stereoOffset: stereoOffset)
+        case .auroraFluid:
+            drawAuroraFluidEngine(context: context, size: size, request: request, time: time, beat: beat, stereoOffset: stereoOffset)
         case .reactionDiffusion:
             drawReactionDiffusionEngine(context: context, size: size, request: request, time: time, stereoOffset: stereoOffset)
         case .kaleidoscopeMaze:
@@ -318,7 +320,7 @@ enum MP4Recorder {
 
     private static func resolvedVisualEngine(_ mode: VisualEngineMode, time: Double) -> VisualEngineMode {
         guard mode == .engineAutopilot else { return mode }
-        let engines: [VisualEngineMode] = [.lightTunnel, .vectorField, .metaballs, .terrainGrid, .oscilloscopeRibbons, .fractalLightning, .fractalTrees, .particleNebula, .shapeConstellation, .liquidCells, .reactionDiffusion, .kaleidoscopeMaze, .moireField, .slitScanRibbons, .cellularAutomata]
+        let engines: [VisualEngineMode] = [.lightTunnel, .vectorField, .metaballs, .terrainGrid, .oscilloscopeRibbons, .fractalLightning, .fractalTrees, .particleNebula, .shapeConstellation, .liquidCells, .auroraFluid, .reactionDiffusion, .kaleidoscopeMaze, .moireField, .slitScanRibbons, .cellularAutomata]
         return engines[Int(time / 12.0) % engines.count]
     }
 
@@ -342,6 +344,8 @@ enum MP4Recorder {
             drawExportSequencerMatrix(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
         case .phaseBloom, .polyphonicLoom:
             drawExportPolyphonicLoom(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
+        case .spectralConductor:
+            drawExportSpectralConductor(context, size: size, request: request, time: time, beat: beat, intensity: intensity)
         case .hyperAnalyzer:
             drawExportSpectrumTunnel(context, size: size, request: request, time: time, intensity: intensity * 0.62)
             drawExportOscilloscopeGarden(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.46)
@@ -350,6 +354,7 @@ enum MP4Recorder {
             drawExportHarmonicOrbits(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.34)
             drawExportSequencerMatrix(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.25)
             drawExportPolyphonicLoom(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.28)
+            drawExportSpectralConductor(context, size: size, request: request, time: time, beat: beat, intensity: intensity * 0.34)
         }
     }
 
@@ -426,6 +431,49 @@ enum MP4Recorder {
             context.addPath(path)
             context.strokePath()
         }
+    }
+
+    private static func drawExportSpectralConductor(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, intensity: Double) {
+        let center = CGPoint(x: size.width * (0.5 + sin(time * 0.33) * 0.035), y: size.height * 0.5)
+        let shortest = min(size.width, size.height)
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let pulse = pow(max(0, sin(beat * .pi * 2.0)), 4.0) * (0.42 + energy * 0.58)
+        let harmonic = 0.32 + energy * 0.68
+        let rings = 3 + Int(request.audioVisualizerPersistence * 8)
+
+        for ring in 0..<rings {
+            let ringT = Double(ring) / Double(max(1, rings - 1))
+            let radius = shortest * (0.07 + ringT * (0.36 + energy * 0.16) + pulse * 0.035)
+            let phase = time * (0.30 + energy * 0.72) * (ring.isMultiple(of: 2) ? 1 : -1)
+            let path = CGMutablePath()
+            for point in 0...120 {
+                let angle = Double(point) / 120.0 * .pi * 2.0
+                let wobble = 1.0 + sin(angle * (2.0 + harmonic * 6.0) + phase) * (0.06 + energy * 0.14)
+                let p = CGPoint(x: center.x + cos(angle + phase) * radius * wobble, y: center.y + sin(angle + phase) * radius * (0.50 + energy * 0.34) * wobble)
+                if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: ringT + time * 0.02, alpha: intensity * (0.05 + harmonic * 0.16 + pulse * 0.10)))
+            context.setLineWidth(0.8 + energy * 3.2 + pulse * 2.0)
+            context.addPath(path)
+            context.strokePath()
+        }
+
+        let spokes = 10 + Int(request.audioVisualizerDetail * 30)
+        for spoke in 0..<spokes {
+            let t = Double(spoke) / Double(spokes)
+            let angle = t * .pi * 2.0 + time * (0.12 + harmonic * 0.56)
+            let inner = shortest * (0.04 + energy * 0.12)
+            let outer = shortest * (0.16 + energy * 0.34 + pulse * 0.10)
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: t + time * 0.02, alpha: intensity * (0.04 + pulse * 0.19)))
+            context.setLineWidth(0.7 + energy * 3.4)
+            context.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
+            context.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer))
+            context.strokePath()
+        }
+
+        let core = shortest * (0.035 + energy * 0.12 + pulse * 0.035)
+        context.setFillColor(paletteColor(request.paletteMode, preset: request.preset, time: beat + time * 0.04, alpha: intensity * (0.16 + pulse * 0.30)))
+        context.fillEllipse(in: CGRect(x: center.x - core, y: center.y - core, width: core * 2, height: core * 2))
     }
 
     private static func drawExportGranularBloom(_ context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, intensity: Double) {
@@ -789,6 +837,53 @@ enum MP4Recorder {
             let diameter = 1.2 + (1.0 - seed) * 7.0 * request.lightSynthIntensity
             context.setFillColor(neonColor(hueBase + seed + time * 0.03, alpha: 0.12 + (1.0 - seed) * 0.42))
             context.fillEllipse(in: CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter))
+        }
+    }
+
+    private static func drawAuroraFluidEngine(context: CGContext, size: CGSize, request: MP4RecordingRequest, time: Double, beat: Double, stereoOffset: Double) {
+        let columns = 34 + Int(request.audioVisualizerDetail * 26)
+        let rows = 20 + Int(request.audioVisualizerDetail * 14)
+        let cellWidth = size.width / Double(columns)
+        let cellHeight = size.height / Double(rows)
+        let energy = musicEnergy(at: time, sequencer: request.sequencer)
+        let flow = time * (0.32 + energy * 0.72)
+        let pulse = pow(max(0, sin(beat * .pi * 2.0)), 4.0) * (0.42 + energy * 0.58)
+        context.setBlendMode(.plusLighter)
+
+        for row in 0..<rows {
+            let v = Double(row) / Double(max(1, rows - 1))
+            for column in 0..<columns {
+                let u = Double(column) / Double(max(1, columns - 1))
+                let wave = sin(u * 10.0 + flow * 2.3 + sin(v * 7.0 - flow) * 1.8)
+                    + cos(v * 14.0 - flow * 1.7)
+                    + sin((u + v) * 18.0 + beat * .pi * 2.0) * (0.32 + energy * 0.58)
+                let density = max(0, wave * 0.24 + 0.40 + energy * 0.22)
+                guard density > 0.20 else { continue }
+                let driftX = sin(v * 12.0 + flow) * cellWidth * 0.3
+                let driftY = cos(u * 9.0 - flow * 1.2) * cellHeight * (0.45 + pulse * 0.85)
+                let rect = CGRect(x: Double(column) * cellWidth + driftX + stereoOffset, y: Double(row) * cellHeight + driftY, width: cellWidth + 1.4, height: cellHeight + 1.4)
+                context.setFillColor(paletteColor(request.paletteMode, preset: request.preset, time: u * 0.32 + v * 0.56 + flow * 0.06, alpha: (0.024 + density * 0.095 + pulse * 0.055) * request.lightSynthIntensity))
+                context.fill(rect)
+            }
+        }
+
+        let center = CGPoint(x: size.width / 2 + stereoOffset, y: size.height / 2)
+        let shortest = min(size.width, size.height)
+        for ribbon in 0..<7 {
+            let ribbonT = Double(ribbon) / 7.0
+            let path = CGMutablePath()
+            for point in 0...180 {
+                let u = Double(point) / 180.0
+                let phase = u * .pi * (3.0 + ribbonT * 8.0) + flow * (1.2 + ribbonT)
+                let radius = shortest * (0.10 + ribbonT * 0.32 + sin(phase * 2.0) * (0.025 + energy * 0.065))
+                let angle = phase + sin(flow + ribbonT * 8.0) * (0.16 + energy * 0.18)
+                let p = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius * (0.46 + energy * 0.30))
+                if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            context.setStrokeColor(paletteColor(request.paletteMode, preset: request.preset, time: ribbonT + flow * 0.05, alpha: (0.10 + pulse * 0.20) * request.lightSynthIntensity))
+            context.setLineWidth(0.8 + energy * 3.0 + pulse * 2.6)
+            context.addPath(path)
+            context.strokePath()
         }
     }
 

@@ -1,8 +1,26 @@
 import AppKit
 import SwiftUI
 
+private enum SynthVoiceSlot: String, CaseIterable, Identifiable {
+    case bass = "Bass"
+    case lead = "Lead"
+
+    var id: String { rawValue }
+}
+
+private enum SynthEditorPage: String, CaseIterable, Identifiable {
+    case tone = "Tone"
+    case shape = "Shape"
+    case motion = "Motion"
+    case fx = "FX"
+
+    var id: String { rawValue }
+}
+
 struct ContentView: View {
     @StateObject private var model = AppModel()
+    @State private var selectedSynthVoice: SynthVoiceSlot = .bass
+    @State private var synthEditorPage: SynthEditorPage = .tone
 
     var body: some View {
         HStack(spacing: 0) {
@@ -102,6 +120,10 @@ struct ContentView: View {
                 Button { model.regenerateVisualScene() } label: {
                     Label("Regen", systemImage: "arrow.triangle.2.circlepath")
                 }
+                Button { model.applyModernVisualFoundation() } label: {
+                    Image(systemName: "sparkles")
+                }
+                .help("Load modern music visuals")
             }
             .controlSize(.small)
         }
@@ -698,12 +720,63 @@ struct ContentView: View {
     }
 
     private var synthPanel: some View {
-            VStack(alignment: .leading, spacing: 14) {
-                voiceEditor("Analog Bass Line", voice: $model.bassVoice)
-                Divider()
-                voiceEditor("Space Lead", voice: $model.leadVoice)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Synth Matrix")
+                    .font(.headline)
+                Spacer()
+                Text("Pulse \(Int(model.audioMeter.rhythmicPulse * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Text("Harmony \(Int(model.audioMeter.harmonicEnergy * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            Picker("Voice", selection: $selectedSynthVoice) {
+                ForEach(SynthVoiceSlot.allCases) { voice in
+                    Text(voice.rawValue).tag(voice)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            HStack {
+                Button("Music Sync") { model.applyMusicSyncedPerformance() }
+                    .buttonStyle(.borderedProminent)
+                Menu("Preset") {
+                    ForEach(PresetLibrary.synthVoicePresets) { preset in
+                        Button(preset.name) { activeSynthVoice.wrappedValue = preset.voice }
+                    }
+                }
+                Button {
+                    activeSynthVoice.wrappedValue = PresetLibrary.randomizedSynthVoice(seed: Int(Date().timeIntervalSinceReferenceDate * 1_000))
+                } label: {
+                    Image(systemName: "shuffle")
+                }
+                .help("Randomize active voice")
+            }
+            .controlSize(.small)
+
+            Toggle(selectedSynthVoice == .bass ? "Analog Bass Line" : "Space Lead", isOn: activeSynthVoice.enabled)
+                .font(.headline)
+
+            Picker("Instrument", selection: activeSynthVoice.instrument) {
+                ForEach(SynthInstrument.allCases) { instrument in
+                    Text(instrument.rawValue).tag(instrument)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Section", selection: $synthEditorPage) {
+                ForEach(SynthEditorPage.allCases) { page in
+                    Text(page.rawValue).tag(page)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            synthVoiceControls(activeSynthVoice)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var delayFXPanel: some View {
@@ -1410,52 +1483,65 @@ struct ContentView: View {
         return values.reduce(0, +) / Double(values.count)
     }
 
-    private func voiceEditor(_ title: String, voice: Binding<SynthVoice>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(title, isOn: voice.enabled)
-                .font(.headline)
-            Picker("Instrument", selection: voice.instrument) {
-                ForEach(SynthInstrument.allCases) { instrument in
-                    Text(instrument.rawValue).tag(instrument)
+    private var activeSynthVoice: Binding<SynthVoice> {
+        Binding(
+            get: { selectedSynthVoice == .bass ? model.bassVoice : model.leadVoice },
+            set: { voice in
+                if selectedSynthVoice == .bass {
+                    model.bassVoice = voice
+                } else {
+                    model.leadVoice = voice
                 }
             }
-            .pickerStyle(.menu)
-            HStack {
-                Menu("Preset") {
-                    ForEach(PresetLibrary.synthVoicePresets) { preset in
-                        Button(preset.name) {
-                            voice.wrappedValue = preset.voice
-                        }
-                    }
-                }
-                Button("Randomize Voice") {
-                    voice.wrappedValue = PresetLibrary.randomizedSynthVoice(seed: Int(Date().timeIntervalSinceReferenceDate * 1_000))
-                }
-            }
-            .controlSize(.small)
-            Slider(value: voice.level, in: 0...1) { Text("Level") }
-            Stepper("Octave " + String(voice.wrappedValue.octave), value: voice.octave, in: 0...5)
-            Slider(value: voice.cutoff, in: 0...1) { Text("Cutoff") }
-            Slider(value: voice.resonance, in: 0...1) { Text("Resonance") }
-            Slider(value: voice.glide, in: 0...1) { Text("Glide") }
-            Slider(value: voice.accent, in: 0...1) { Text("Accent") }
-            Slider(value: voice.attack, in: 0...1) { Text("Attack") }
-            Slider(value: voice.decay, in: 0...1) { Text("Decay") }
-            Slider(value: voice.sustain, in: 0...1) { Text("Sustain") }
-            Slider(value: voice.drive, in: 0...1) { Text("Drive") }
-            Slider(value: voice.filterEnvelope, in: 0...1) { Text("Filter envelope") }
-            Slider(value: voice.lfoRate, in: 0...1) { Text("LFO rate") }
-            Slider(value: voice.lfoAmount, in: 0...1) { Text("LFO amount") }
-            Slider(value: voice.morph, in: 0...1) { Text("Morph") }
-            Slider(value: voice.unison, in: 0...1) { Text("Unison") }
-            Slider(value: voice.detune, in: 0...1) { Text("Detune") }
-            Slider(value: voice.subLevel, in: 0...1) { Text("Sub") }
-            Slider(value: voice.noiseLevel, in: 0...1) { Text("Noise") }
-            Slider(value: voice.fmAmount, in: 0...1) { Text("FM / Ring") }
-            Slider(value: voice.wavefold, in: 0...1) { Text("Wavefold") }
-            Slider(value: voice.grainSize, in: 0...1) { Text("Grain size") }
-            Slider(value: voice.grainDensity, in: 0...1) { Text("Grain density") }
-            Slider(value: voice.bitcrush, in: 0...1) { Text("Bitcrush") }
+        )
+    }
+
+    @ViewBuilder
+    private func synthVoiceControls(_ voice: Binding<SynthVoice>) -> some View {
+        switch synthEditorPage {
+        case .tone:
+            synthSlider("Level", value: voice.level)
+            Stepper("Octave \(voice.wrappedValue.octave)", value: voice.octave, in: 0...5)
+            synthSlider("Cutoff", value: voice.cutoff)
+            synthSlider("Resonance", value: voice.resonance)
+            synthSlider("Drive", value: voice.drive)
+        case .shape:
+            synthSlider("Morph", value: voice.morph)
+            synthSlider("Unison", value: voice.unison)
+            synthSlider("Detune", value: voice.detune)
+            synthSlider("FM / Ring", value: voice.fmAmount)
+            synthSlider("Wavefold", value: voice.wavefold)
+            synthSlider("Sub", value: voice.subLevel)
+            synthSlider("Noise", value: voice.noiseLevel)
+        case .motion:
+            synthSlider("Attack", value: voice.attack)
+            synthSlider("Decay", value: voice.decay)
+            synthSlider("Sustain", value: voice.sustain)
+            synthSlider("Filter envelope", value: voice.filterEnvelope)
+            synthSlider("LFO rate", value: voice.lfoRate)
+            synthSlider("LFO amount", value: voice.lfoAmount)
+            synthSlider("Glide", value: voice.glide)
+            synthSlider("Accent", value: voice.accent)
+        case .fx:
+            synthSlider("Grain size", value: voice.grainSize)
+            synthSlider("Grain density", value: voice.grainDensity)
+            synthSlider("Bitcrush", value: voice.bitcrush)
+            synthSlider("Chorus", value: voice.chorus)
+            synthSlider("Shimmer", value: voice.shimmer)
+            synthSlider("Kick sidechain", value: voice.sidechain)
+        }
+    }
+
+    private func synthSlider(_ title: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .frame(width: 94, alignment: .leading)
+            Slider(value: value, in: 0...1)
+            Text("\(Int(value.wrappedValue * 100))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 28, alignment: .trailing)
         }
     }
 
