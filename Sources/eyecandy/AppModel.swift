@@ -31,7 +31,8 @@ final class AppModel: ObservableObject {
     @Published var audioVisualizerIntensity = 0.90
     @Published var audioVisualizerDetail = 0.86
     @Published var audioVisualizerPersistence = 0.64
-    @Published var gpuVisualizerBackend: GPUVisualizerBackend = .metal
+    @Published var gpuVisualizerBackend: GPUVisualizerBackend = .openGL
+    @Published var openGLVisualizerStyle: OpenGLVisualizerStyle = .fullSpectrum
     @Published var metalVisualizerEffectMode: MetalVisualizerEffectMode = .fractalBloom
     @Published var metalVisualizerEffectIntensity = 0.88
     @Published var metalVisualizerEffectSpeed = 0.82
@@ -258,6 +259,8 @@ final class AppModel: ObservableObject {
     func applyPreset(_ preset: VisualPreset) {
         selectedPreset = preset
         selectedFamily = preset.family
+        let openGLStyles = OpenGLVisualizerStyle.allCases
+        openGLVisualizerStyle = openGLStyles[abs(preset.id * 5 + preset.name.count) % openGLStyles.count]
         activeSceneSlot = nil
         regenerateVisualScene(for: preset)
     }
@@ -1150,6 +1153,25 @@ final class AppModel: ObservableObject {
             cameraInput.stop()
             status = "Camera input off"
         }
+    }
+
+    func activateClosedCircuitFeedback() {
+        gpuVisualizerBackend = .openGL
+        openGLVisualizerStyle = .fullSpectrum
+        cameraFeedbackMode = .closedCircuit
+        cameraOverlayOpacity = 0.82
+        cameraFeedbackAmount = 0.86
+        cameraOverlayScale = 1.04
+        cameraFeedbackRotation = 0.24
+        feedbackSimulatorMode = .opticalTunnel
+        feedbackSimulatorIntensity = 0.72
+        feedbackSimulatorDecay = 0.88
+        feedbackSimulatorZoom = 0.74
+        feedbackSimulatorTwist = 0.44
+        feedbackSimulatorDisplacement = 0.72
+        feedbackSimulatorAudioReactive = true
+        setCameraInputEnabled(true)
+        status = "Closed-circuit camera feedback armed - aim the camera at the output display"
     }
 
     func refreshCameraDevices() {

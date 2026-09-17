@@ -467,6 +467,8 @@ struct ContentView: View {
                     meterRow("Mid", value: model.audioMeter.mid)
                     meterRow("High", value: model.audioMeter.treble)
                     meterRow("Flux", value: model.audioMeter.spectralFlux)
+                    meterRow("Kick", value: model.audioMeter.kick)
+                    meterRow("Snare", value: model.audioMeter.snare)
                 }
                 HStack {
                     Button("Max") { model.applyVisualizerMax() }
@@ -480,6 +482,12 @@ struct ContentView: View {
                 Picker("GPU effects", selection: $model.gpuVisualizerBackend) {
                     ForEach(GPUVisualizerBackend.allCases) { backend in
                         Text(backend.rawValue).tag(backend)
+                    }
+                }
+                .pickerStyle(.menu)
+                Picker("OpenGL style", selection: $model.openGLVisualizerStyle) {
+                    ForEach(OpenGLVisualizerStyle.allCases) { style in
+                        Text(style.rawValue).tag(style)
                     }
                 }
                 .pickerStyle(.menu)
@@ -1152,6 +1160,9 @@ struct ContentView: View {
                 }
             }
             .pickerStyle(.menu)
+
+            Button("Arm Closed-Circuit Feedback") { model.activateClosedCircuitFeedback() }
+                .buttonStyle(.borderedProminent)
 
             Toggle("Mirror camera", isOn: $model.cameraMirror)
             Slider(value: $model.cameraOverlayOpacity, in: 0...1) { Text("Camera opacity") }

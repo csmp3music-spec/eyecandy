@@ -138,6 +138,26 @@ enum GPUVisualizerBackend: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum OpenGLVisualizerStyle: String, CaseIterable, Identifiable {
+    case neonHighway = "Neon Highway"
+    case acidKaleidoscope = "Acid Kaleidoscope"
+    case lissajousBloom = "Lissajous Bloom"
+    case starfieldRave = "Starfield Rave"
+    case fullSpectrum = "Full Spectrum"
+
+    var id: String { rawValue }
+
+    var shaderIndex: Float {
+        switch self {
+        case .neonHighway: return 0
+        case .acidKaleidoscope: return 1
+        case .lissajousBloom: return 2
+        case .starfieldRave: return 3
+        case .fullSpectrum: return 4
+        }
+    }
+}
+
 enum MetalVisualizerEffectMode: String, CaseIterable, Identifiable {
     case analyzer = "Analyzer Overlay"
     case introFade = "Intro Fade"
@@ -299,6 +319,7 @@ enum RecordingResolution: String, CaseIterable, Identifiable {
 
 enum CameraFeedbackMode: String, CaseIterable, Identifiable {
     case optical = "Optical Screen Loop"
+    case closedCircuit = "Closed Circuit Broadcast"
     case echoTunnel = "Echo Tunnel"
     case slitEcho = "Slit Echo"
     case lumaKey = "Luma Key Overlay"
@@ -511,6 +532,10 @@ struct AudioMeterSnapshot: Hashable {
     var vocalEnvelope = 0.0
     var vocalBrightness = 0.0
     var vocalPresence = 0.0
+    var kick = 0.0
+    var snare = 0.0
+    var hat = 0.0
+    var clap = 0.0
 }
 
 enum BroadcastTarget: String, CaseIterable, Identifiable {

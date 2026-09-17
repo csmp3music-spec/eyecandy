@@ -2345,6 +2345,8 @@ enum MP4Recorder {
         switch request.cameraFeedbackMode {
         case .optical, .lumaKey:
             echoCount = 5
+        case .closedCircuit:
+            echoCount = 18
         case .echoTunnel, .chromaWash:
             echoCount = 9
         case .slitEcho:
@@ -2355,7 +2357,7 @@ enum MP4Recorder {
         context.setBlendMode(.screen)
         for echo in 0...echoCount {
             let amount = Double(echo) / Double(max(1, echoCount))
-            let modeBoost = request.cameraFeedbackMode == .echoTunnel ? 0.48 : 0.28
+            let modeBoost = request.cameraFeedbackMode == .closedCircuit ? 0.72 : (request.cameraFeedbackMode == .echoTunnel ? 0.48 : 0.28)
             let echoScale = scale + amount * feedback * modeBoost
             let width = size.width * echoScale
             let height = size.height * echoScale

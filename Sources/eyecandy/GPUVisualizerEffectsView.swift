@@ -24,14 +24,23 @@ struct GPUVisualizerEffectState {
     var treble: Float
     var flux: Float
     var transient: Float
+    var kick: Float
+    var snare: Float
+    var hat: Float
+    var clap: Float
     var feedback: Float
     var macroX: Float
     var macroY: Float
     var metalEffectMode: Float
     var metalEffectIntensity: Float
     var metalEffectSpeed: Float
+    var openGLStyle: Float
+    var cameraImage: CGImage?
+    var cameraMix: Float
+    var cameraRotation: Float
+    var cameraMirror: Bool
 
-    init(intensity: Float, detail: Float, persistence: Float, bass: Float, mid: Float, treble: Float, flux: Float, transient: Float, feedback: Float, macroX: Float, macroY: Float, metalEffectMode: Float, metalEffectIntensity: Float, metalEffectSpeed: Float) {
+    init(intensity: Float, detail: Float, persistence: Float, bass: Float, mid: Float, treble: Float, flux: Float, transient: Float, feedback: Float, macroX: Float, macroY: Float, metalEffectMode: Float, metalEffectIntensity: Float, metalEffectSpeed: Float, kick: Float = 0, snare: Float = 0, hat: Float = 0, clap: Float = 0, openGLStyle: Float = 4, cameraImage: CGImage? = nil, cameraMix: Float = 0, cameraRotation: Float = 0, cameraMirror: Bool = false) {
         self.intensity = intensity
         self.detail = detail
         self.persistence = persistence
@@ -40,12 +49,21 @@ struct GPUVisualizerEffectState {
         self.treble = treble
         self.flux = flux
         self.transient = transient
+        self.kick = kick
+        self.snare = snare
+        self.hat = hat
+        self.clap = clap
         self.feedback = feedback
         self.macroX = macroX
         self.macroY = macroY
         self.metalEffectMode = metalEffectMode
         self.metalEffectIntensity = metalEffectIntensity
         self.metalEffectSpeed = metalEffectSpeed
+        self.openGLStyle = openGLStyle
+        self.cameraImage = cameraImage
+        self.cameraMix = cameraMix
+        self.cameraRotation = cameraRotation
+        self.cameraMirror = cameraMirror
     }
 
     @MainActor init(model: AppModel) {
@@ -57,12 +75,21 @@ struct GPUVisualizerEffectState {
         treble = Float(model.audioMeter.treble)
         flux = Float(model.audioMeter.spectralFlux)
         transient = Float(model.audioMeter.transient)
-        feedback = Float(model.feedbackSimulatorMode == .off ? 0 : model.feedbackSimulatorIntensity)
+        kick = Float(model.audioMeter.kick)
+        snare = Float(model.audioMeter.snare)
+        hat = Float(model.audioMeter.hat)
+        clap = Float(model.audioMeter.clap)
+        feedback = Float(max(model.feedbackSimulatorMode == .off ? 0 : model.feedbackSimulatorIntensity, model.cameraInputEnabled ? model.cameraFeedbackAmount : 0))
         macroX = Float(model.macroX)
         macroY = Float(model.macroY)
         metalEffectMode = model.metalVisualizerEffectMode.shaderIndex
         metalEffectIntensity = Float(model.metalVisualizerEffectIntensity)
         metalEffectSpeed = Float(model.metalVisualizerEffectSpeed)
+        openGLStyle = model.openGLVisualizerStyle.shaderIndex
+        cameraImage = model.cameraInputEnabled ? model.cameraInput.latestImage : nil
+        cameraMix = Float(model.cameraInputEnabled ? model.cameraOverlayOpacity : 0)
+        cameraRotation = Float(model.cameraFeedbackRotation)
+        cameraMirror = model.cameraMirror
     }
 }
 
@@ -330,6 +357,10 @@ private final class OpenGLVisualizerEffectsView: NSOpenGLView {
 
     private var startedAt = Date.timeIntervalSinceReferenceDate
     private var redrawTimer: Timer?
+    private var feedbackTexture: GLuint = 0
+    private var cameraTexture: GLuint = 0
+    private var textureWidth: GLsizei = 0
+    private var textureHeight: GLsizei = 0
 
     override var isOpaque: Bool { false }
 
@@ -356,8 +387,12 @@ private final class OpenGLVisualizerEffectsView: NSOpenGLView {
     override func prepareOpenGL() {
         super.prepareOpenGL()
         openGLContext?.makeCurrentContext()
+        glDisable(GLenum(GL_DEPTH_TEST))
         glEnable(GLenum(GL_BLEND))
-        glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
+        glEnable(GLenum(GL_LINE_SMOOTH))
+        glHint(GLenum(GL_LINE_SMOOTH_HINT), GLenum(GL_NICEST))
+        glGenTextures(1, &feedbackTexture)
+        glGenTextures(1, &cameraTexture)
         redrawTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             self?.needsDisplay = true
         }
@@ -367,63 +402,275 @@ private final class OpenGLVisualizerEffectsView: NSOpenGLView {
         super.draw(dirtyRect)
         guard let context = openGLContext else { return }
         context.makeCurrentContext()
-        let size = bounds.size
+
+        let backingSize = convertToBacking(bounds).size
+        let width = max(1, GLsizei(backingSize.width.rounded()))
+        let height = max(1, GLsizei(backingSize.height.rounded()))
         let time = Float(Date.timeIntervalSinceReferenceDate - startedAt)
-        glViewport(0, 0, GLsizei(size.width), GLsizei(size.height))
-        glClearColor(0, 0, 0, 0)
-        glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
+        ensureFeedbackTexture(width: width, height: height)
+
+        glViewport(0, 0, width, height)
         glMatrixMode(GLenum(GL_PROJECTION))
         glLoadIdentity()
-        glOrtho(0, GLdouble(size.width), 0, GLdouble(size.height), -1, 1)
+        glOrtho(0, GLdouble(width), 0, GLdouble(height), -1, 1)
         glMatrixMode(GLenum(GL_MODELVIEW))
         glLoadIdentity()
+        glClearColor(0, 0, 0, 1)
+        glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
 
-        let lines = 18 + Int(effectState.detail * 44)
-        for line in 0..<lines {
-            let t = Float(line) / Float(max(1, lines - 1))
-            let y = CGFloat(t) * size.height
-            let motionRate: Float = 1.4 + effectState.flux * 4.0
-            let motion = sin(time * motionRate + t * 19.0)
-            let width = Float(size.width)
-            let feedbackScale: Float = effectState.feedback * 0.035
-            let driftScale: Float = 0.01 + feedbackScale
-            let driftRange: Float = width * driftScale
-            let drift = motion * driftRange
-            let baseAlpha: Float = 0.012 + effectState.intensity * 0.065
-            let brightness: Float = 0.55 + effectState.treble * 0.45
-            let alpha = baseAlpha * brightness
-            let wavePhase = time + t * 9.0
-            let verticalOffset = sin(wavePhase) * effectState.transient * 12.0
-            let waveY = Float(y) + verticalOffset
-            glColor4f(0.20 + t * 0.60, 0.82, 1.0 - t * 0.40, alpha)
+        drawFeedback(width: Float(width), height: Float(height))
+        drawCameraSource(width: Float(width), height: Float(height))
+        glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE))
+
+        let style = Int(effectState.openGLStyle.rounded())
+        if style == 0 || style == 4 {
+            drawNeonHighway(width: Float(width), height: Float(height), time: time)
+        }
+        if style == 1 || style == 4 {
+            drawAcidKaleidoscope(width: Float(width), height: Float(height), time: time)
+        }
+        if style == 2 || style == 4 {
+            drawLissajousBloom(width: Float(width), height: Float(height), time: time)
+        }
+        if style == 3 || style == 4 {
+            drawStarfield(width: Float(width), height: Float(height), time: time)
+        }
+        drawBeatBursts(width: Float(width), height: Float(height), time: time)
+        drawScanlines(width: Float(width), height: Float(height), time: time)
+
+        glBindTexture(GLenum(GL_TEXTURE_2D), feedbackTexture)
+        glCopyTexSubImage2D(GLenum(GL_TEXTURE_2D), 0, 0, 0, 0, 0, width, height)
+        context.flushBuffer()
+    }
+
+    private func ensureFeedbackTexture(width: GLsizei, height: GLsizei) {
+        guard feedbackTexture != 0, (width != textureWidth || height != textureHeight) else { return }
+        textureWidth = width
+        textureHeight = height
+        glBindTexture(GLenum(GL_TEXTURE_2D), feedbackTexture)
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_CLAMP_TO_EDGE))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_CLAMP_TO_EDGE))
+        glTexImage2D(GLenum(GL_TEXTURE_2D), 0, GLint(GL_RGBA), width, height, 0, GLenum(GL_RGBA), GLenum(GL_UNSIGNED_BYTE), nil)
+    }
+
+    private func drawFeedback(width: Float, height: Float) {
+        guard textureWidth > 0, textureHeight > 0 else { return }
+        let feedback = 0.56 + effectState.persistence * 0.34 + effectState.feedback * 0.08
+        let zoom = 1.0 + effectState.bass * 0.010 + effectState.flux * 0.006
+        let driftX = sin(Float(Date.timeIntervalSinceReferenceDate - startedAt) * 0.31) * effectState.flux * width * 0.008
+        let driftY = effectState.snare * height * 0.006
+        glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
+        glEnable(GLenum(GL_TEXTURE_2D))
+        glBindTexture(GLenum(GL_TEXTURE_2D), feedbackTexture)
+        glColor4f(0.98 + effectState.treble * 0.02, 0.90 + effectState.mid * 0.10, 1.0, feedback)
+        let left = (width - width * zoom) * 0.5 + driftX
+        let bottom = (height - height * zoom) * 0.5 + driftY
+        glBegin(GLenum(GL_QUADS))
+        glTexCoord2f(0, 0); glVertex2f(left, bottom)
+        glTexCoord2f(1, 0); glVertex2f(left + width * zoom, bottom)
+        glTexCoord2f(1, 1); glVertex2f(left + width * zoom, bottom + height * zoom)
+        glTexCoord2f(0, 1); glVertex2f(left, bottom + height * zoom)
+        glEnd()
+        glDisable(GLenum(GL_TEXTURE_2D))
+    }
+
+    private func drawCameraSource(width: Float, height: Float) {
+        guard effectState.cameraMix > 0.01, let image = effectState.cameraImage, uploadCameraImage(image) else { return }
+        glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
+        glEnable(GLenum(GL_TEXTURE_2D))
+        glBindTexture(GLenum(GL_TEXTURE_2D), cameraTexture)
+        glColor4f(1, 1, 1, min(0.92, effectState.cameraMix * 0.78))
+        glPushMatrix()
+        glTranslatef(width * 0.5, height * 0.5, 0)
+        glRotatef(effectState.cameraRotation * 18.0, 0, 0, 1)
+        glTranslatef(-width * 0.5, -height * 0.5, 0)
+        let leftTex: Float = effectState.cameraMirror ? 1 : 0
+        let rightTex: Float = effectState.cameraMirror ? 0 : 1
+        glBegin(GLenum(GL_QUADS))
+        glTexCoord2f(leftTex, 1); glVertex2f(0, 0)
+        glTexCoord2f(rightTex, 1); glVertex2f(width, 0)
+        glTexCoord2f(rightTex, 0); glVertex2f(width, height)
+        glTexCoord2f(leftTex, 0); glVertex2f(0, height)
+        glEnd()
+        glPopMatrix()
+        glDisable(GLenum(GL_TEXTURE_2D))
+    }
+
+    private func uploadCameraImage(_ image: CGImage) -> Bool {
+        let representation = NSBitmapImageRep(cgImage: image)
+        guard let pixels = representation.bitmapData else { return false }
+        glBindTexture(GLenum(GL_TEXTURE_2D), cameraTexture)
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_CLAMP_TO_EDGE))
+        glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_CLAMP_TO_EDGE))
+        glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), 1)
+        glTexImage2D(
+            GLenum(GL_TEXTURE_2D),
+            0,
+            GLint(GL_RGBA),
+            GLsizei(representation.pixelsWide),
+            GLsizei(representation.pixelsHigh),
+            0,
+            GLenum(GL_RGBA),
+            GLenum(GL_UNSIGNED_BYTE),
+            pixels
+        )
+        return true
+    }
+
+    private func drawNeonHighway(width: Float, height: Float, time: Float) {
+        let horizon = height * (0.47 + effectState.snare * 0.06)
+        let floorLines = 12 + Int(effectState.detail * 22)
+        let alpha = effectState.intensity * (0.06 + effectState.hat * 0.10)
+        glLineWidth(1.0 + effectState.treble * 1.8)
+        for line in 0..<floorLines {
+            let t = (Float(line) / Float(floorLines) + time * (0.10 + effectState.kick * 0.22)).truncatingRemainder(dividingBy: 1)
+            let y = horizon - 8 + pow(t, 2.25) * (height - horizon + 10)
+            glColor4f(0.12 + t * 0.50, 0.68 + t * 0.32, 1.0, alpha * (1.0 - t * 0.25))
             glBegin(GLenum(GL_LINES))
-            glVertex2f(drift, Float(y))
-            glVertex2f(Float(size.width) + drift, waveY)
+            glVertex2f(0, y)
+            glVertex2f(width, y)
             glEnd()
         }
 
-        let rings = 5 + Int(effectState.persistence * 12)
-        let centerX = Float(size.width * 0.5)
-        let centerY = Float(size.height * 0.5)
-        let shortest = Float(min(size.width, size.height))
-        for ring in 0..<rings {
-            let speed: Float = 0.05 + effectState.bass * 0.16
-            let phaseBase = Float(ring) / Float(rings) + time * speed
-            let phase = phaseBase.truncatingRemainder(dividingBy: 1)
-            let spread: Float = 0.34 + effectState.bass * 0.16
-            let radius = shortest * (0.10 + phase * spread)
-            glColor4f(0.82, 0.16 + phase * 0.74, 1.0, effectState.intensity * (1 - phase) * 0.10)
-            glBegin(GLenum(GL_LINE_LOOP))
-            for point in 0..<72 {
-                let angle = Float(point) / 72.0 * .pi * 2.0
-                glVertex2f(centerX + cos(angle) * radius, centerY + sin(angle) * radius * 0.64)
+        let lanes = 14 + Int(effectState.detail * 20)
+        let center = width * 0.5
+        for lane in -lanes...lanes {
+            let laneT = Float(lane) / Float(max(1, lanes))
+            let wobble = sin(time * (0.65 + effectState.flux * 2.4) + laneT * 12.0) * width * 0.015
+            glColor4f(0.92, 0.12 + abs(laneT) * 0.58, 1.0 - abs(laneT) * 0.28, alpha * (0.55 + effectState.kick * 0.70))
+            glBegin(GLenum(GL_LINES))
+            glVertex2f(center + laneT * width * 0.035 + wobble * 0.1, horizon)
+            glVertex2f(center + laneT * width * 0.76 + wobble, 0)
+            glEnd()
+        }
+    }
+
+    private func drawAcidKaleidoscope(width: Float, height: Float, time: Float) {
+        let centerX = width * 0.5
+        let centerY = height * 0.5
+        let radius = min(width, height) * (0.24 + effectState.bass * 0.18)
+        let petals = 8 + Int(effectState.detail * 18)
+        let layers = 2 + Int(effectState.persistence * 5)
+        for layer in 0..<layers {
+            let layerT = Float(layer) / Float(max(1, layers))
+            let rotation = time * (0.18 + effectState.flux * 0.54) * (layer.isMultiple(of: 2) ? 1 : -1)
+            for petal in 0..<petals {
+                let a = Float(petal) / Float(petals) * .pi * 2 + rotation
+                let hue = Float(petal) / Float(petals) + time * 0.025 + layerT * 0.18
+                let color = spectralColor(hue)
+                glColor4f(color.0, color.1, color.2, effectState.intensity * (0.018 + effectState.mid * 0.060 + effectState.snare * 0.075))
+                glLineWidth(0.8 + effectState.treble * 2.2)
+                glBegin(GLenum(GL_LINE_STRIP))
+                for point in 0...52 {
+                    let u = Float(point) / 52.0
+                    let twist = sin(u * .pi * (3.0 + effectState.treble * 8.0) + time * 2.6 + Float(petal))
+                    let r = radius * (0.22 + u * (0.56 + layerT * 0.36)) + twist * radius * (0.03 + effectState.transient * 0.07)
+                    let angle = a + (u - 0.5) * (.pi / Float(petals)) * (1.4 + effectState.mid * 1.8)
+                    glVertex2f(centerX + cos(angle) * r, centerY + sin(angle) * r * (0.62 + effectState.mid * 0.22))
+                }
+                glEnd()
+            }
+        }
+    }
+
+    private func drawLissajousBloom(width: Float, height: Float, time: Float) {
+        let centerX = width * 0.5
+        let centerY = height * 0.5
+        let scale = min(width, height) * (0.18 + effectState.harmonicScale)
+        let strands = 2 + Int(effectState.detail * 5)
+        for strand in 0..<strands {
+            let shift = Float(strand) * 0.72 + time * (0.34 + effectState.flux * 0.74)
+            let color = spectralColor(Float(strand) / Float(strands) + time * 0.04)
+            glColor4f(color.0, color.1, color.2, effectState.intensity * (0.035 + effectState.mid * 0.10 + effectState.hat * 0.06))
+            glLineWidth(0.8 + effectState.treble * 2.8)
+            glBegin(GLenum(GL_LINE_STRIP))
+            for point in 0...240 {
+                let t = Float(point) / 240.0 * .pi * 2
+                let x = sin(t * (3.0 + effectState.bass * 2.0) + shift) * scale
+                let y = sin(t * (4.0 + effectState.mid * 3.0) + shift * 1.37) * scale * (0.58 + effectState.treble * 0.24)
+                glVertex2f(centerX + x, centerY + y)
             }
             glEnd()
         }
-        context.flushBuffer()
+    }
+
+    private func drawStarfield(width: Float, height: Float, time: Float) {
+        let stars = 120 + Int(effectState.detail * 260)
+        let centerX = width * (0.5 + effectState.macroX * 0.08 - 0.04)
+        let centerY = height * (0.5 + effectState.macroY * 0.08 - 0.04)
+        glPointSize(1.0 + effectState.transient * 4.0)
+        glBegin(GLenum(GL_POINTS))
+        for star in 0..<stars {
+            let seed = Float(star) * 12.9898
+            let angle = hash(seed + 1.7) * .pi * 2
+            let depth = (hash(seed + 5.1) + time * (0.08 + effectState.kick * 0.34)).truncatingRemainder(dividingBy: 1)
+            let radius = pow(depth, 2.4) * min(width, height) * (0.22 + effectState.bass * 0.30)
+            let color = spectralColor(hash(seed + 9.3) + time * 0.025)
+            glColor4f(color.0, color.1, color.2, effectState.intensity * (0.015 + (1.0 - depth) * 0.11 + effectState.hat * 0.06))
+            glVertex2f(centerX + cos(angle) * radius, centerY + sin(angle) * radius)
+        }
+        glEnd()
+    }
+
+    private func drawBeatBursts(width: Float, height: Float, time: Float) {
+        let pulse = min(1, effectState.kick * 0.88 + effectState.snare * 0.52 + effectState.transient * 0.44)
+        guard pulse > 0.01 else { return }
+        let centerX = width * 0.5
+        let centerY = height * 0.5
+        let rays = 20 + Int(effectState.detail * 64)
+        let inner = min(width, height) * (0.035 + effectState.bass * 0.11)
+        let outer = min(width, height) * (0.16 + pulse * 0.34)
+        glLineWidth(1.0 + pulse * 4.0)
+        for ray in 0..<rays {
+            let angle = Float(ray) / Float(rays) * .pi * 2 + time * (0.16 + effectState.flux * 0.72)
+            let color = spectralColor(Float(ray) / Float(rays) + time * 0.06)
+            glColor4f(color.0, color.1, color.2, effectState.intensity * pulse * (0.045 + effectState.clap * 0.08))
+            glBegin(GLenum(GL_LINES))
+            glVertex2f(centerX + cos(angle) * inner, centerY + sin(angle) * inner)
+            glVertex2f(centerX + cos(angle) * outer, centerY + sin(angle) * outer)
+            glEnd()
+        }
+    }
+
+    private func drawScanlines(width: Float, height: Float, time: Float) {
+        let count = 12 + Int(effectState.detail * 30)
+        glLineWidth(1)
+        for line in 0..<count {
+            let t = Float(line) / Float(count)
+            let y = (t * height + sin(time * 4.0 + t * 28.0) * effectState.hat * 8.0).truncatingRemainder(dividingBy: height)
+            glColor4f(0.12, 0.92, 1.0, effectState.intensity * (0.005 + effectState.hat * 0.018))
+            glBegin(GLenum(GL_LINES))
+            glVertex2f(0, y)
+            glVertex2f(width, y)
+            glEnd()
+        }
+    }
+
+    private func spectralColor(_ phase: Float) -> (Float, Float, Float) {
+        let wave = phase * .pi * 2
+        return (0.5 + 0.5 * cos(wave), 0.5 + 0.5 * cos(wave + 2.094), 0.5 + 0.5 * cos(wave + 4.188))
+    }
+
+    private func hash(_ value: Float) -> Float {
+        (sin(value) * 43_758.5453).truncatingRemainder(dividingBy: 1).magnitude
     }
 
     deinit {
         redrawTimer?.invalidate()
+        openGLContext?.makeCurrentContext()
+        if feedbackTexture != 0 {
+            glDeleteTextures(1, &feedbackTexture)
+        }
+        if cameraTexture != 0 {
+            glDeleteTextures(1, &cameraTexture)
+        }
     }
+}
+
+private extension GPUVisualizerEffectState {
+    var harmonicScale: Float { 0.16 + mid * 0.11 + bass * 0.07 }
 }

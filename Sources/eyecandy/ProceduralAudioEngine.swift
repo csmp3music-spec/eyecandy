@@ -71,6 +71,10 @@ final class ProceduralAudioEngine {
     private var meterVocalEnvelope = 0.0
     private var meterVocalBrightness = 0.0
     private var meterVocalPresence = 0.0
+    private var meterKick = 0.0
+    private var meterSnare = 0.0
+    private var meterHat = 0.0
+    private var meterClap = 0.0
     private var microphoneTapInstalled = false
     private var previousBass = 0.0
     private var previousMid = 0.0
@@ -163,7 +167,11 @@ final class ProceduralAudioEngine {
             harmonicEnergy: meterHarmonicEnergy,
             vocalEnvelope: meterVocalEnvelope,
             vocalBrightness: meterVocalBrightness,
-            vocalPresence: meterVocalPresence
+            vocalPresence: meterVocalPresence,
+            kick: meterKick,
+            snare: meterSnare,
+            hat: meterHat,
+            clap: meterClap
         )
         meterPeakLeft *= 0.82
         meterPeakRight *= 0.82
@@ -179,6 +187,10 @@ final class ProceduralAudioEngine {
         meterVocalEnvelope *= 0.86
         meterVocalBrightness *= 0.88
         meterVocalPresence *= 0.86
+        meterKick *= 0.72
+        meterSnare *= 0.78
+        meterHat *= 0.64
+        meterClap *= 0.76
         meterLimitedFrames = 0
         meterLock.unlock()
         return snapshot
@@ -650,6 +662,10 @@ final class ProceduralAudioEngine {
         meterStereoBalance += (balance - meterStereoBalance) * 0.08
         meterRhythmicPulse = max(meterRhythmicPulse, rhythmicPulse)
         meterHarmonicEnergy = max(meterHarmonicEnergy, harmonicEnergy)
+        meterKick = max(meterKick, kickEnv)
+        meterSnare = max(meterSnare, snareEnv)
+        meterHat = max(meterHat, hatEnv)
+        meterClap = max(meterClap, clapEnv)
         meterLock.unlock()
     }
 

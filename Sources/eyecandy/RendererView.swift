@@ -2904,6 +2904,8 @@ struct RendererView: View {
 
     private func drawCameraFeedbackOverlay(context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
         guard model.cameraInputEnabled, let image = model.cameraInput.latestImage else { return }
+        // The OpenGL compositor owns the recursive buffer for a real closed-circuit loop.
+        guard !(model.cameraFeedbackMode == .closedCircuit && model.gpuVisualizerBackend == .openGL) else { return }
 
         let baseOpacity = model.cameraOverlayOpacity
         let feedback = model.cameraFeedbackAmount
@@ -2914,6 +2916,8 @@ struct RendererView: View {
         switch model.cameraFeedbackMode {
         case .optical, .lumaKey:
             echoCount = 5
+        case .closedCircuit:
+            echoCount = 18
         case .echoTunnel, .chromaWash:
             echoCount = 9
         case .slitEcho:
@@ -2922,7 +2926,7 @@ struct RendererView: View {
 
         for echo in 0...echoCount {
             let amount = Double(echo) / Double(max(1, echoCount))
-            let modeBoost = model.cameraFeedbackMode == .echoTunnel ? 0.48 : 0.28
+            let modeBoost = model.cameraFeedbackMode == .closedCircuit ? 0.72 : (model.cameraFeedbackMode == .echoTunnel ? 0.48 : 0.28)
             let echoScale = scale + amount * feedback * modeBoost
             let width = size.width * echoScale
             let height = size.height * echoScale

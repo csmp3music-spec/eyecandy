@@ -149,7 +149,7 @@ enum PresetLibrary {
         let wordsA = ["Acid", "Chrome", "Dream", "Neon", "Vortex", "Plasma", "Crystal", "Astral", "Liquid", "Mirror", "Yak", "Prism", "Camera", "Luma", "Chroma", "Echo", "Vector", "Laser"]
         let wordsB = ["Temple", "Bloom", "Scanner", "Feedback", "Orbit", "Cathedral", "Machine", "Serpent", "Signal", "Ritual", "Stampede", "Hologram", "Loop", "Gate", "Scope", "Tunnel"]
 
-        let generated = (0..<220).map { index in
+        let generated = (0..<640).map { index in
             let family = families[index % families.count]
             let hue = Double((index * 37) % 360) / 360.0
             let symmetry = [3, 4, 5, 6, 8, 10, 12][index % 7]
